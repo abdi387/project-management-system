@@ -13,7 +13,7 @@ import SemesterLock from '../../components/common/SemesterLock';
 
 const ProposalSubmission = () => {
   const { user } = useAuth();
-  const { getGroupByStudentId, getProposalByGroupId, submitProposal, academicYear, isReadOnly } = useProject();
+  const { getGroupByStudentId, getProposalByGroupId, submitProposal, academicYear, isReadOnly, projectDomains } = useProject();
   
   if (academicYear?.semester === 2) {
     return <SemesterLock message="Project proposal submission is only available in the first semester." />;
@@ -30,18 +30,7 @@ const ProposalSubmission = () => {
     { title: '', domain: '', description: '' }
   ]);
 
-  const domains = [
-    { value: 'Web Development', label: 'Web Development' },
-    { value: 'Mobile Application', label: 'Mobile Application' },
-    { value: 'Machine Learning', label: 'Machine Learning' },
-    { value: 'Data Science', label: 'Data Science' },
-    { value: 'Cybersecurity', label: 'Cybersecurity' },
-    { value: 'IoT', label: 'Internet of Things (IoT)' },
-    { value: 'Cloud Computing', label: 'Cloud Computing' },
-    { value: 'Blockchain', label: 'Blockchain' },
-    { value: 'Game Development', label: 'Game Development' },
-    { value: 'Other', label: 'Other' }
-  ];
+  const domains = projectDomains.map(domain => ({ value: domain, label: domain }));
 
   const handleTitleChange = (index, field, value) => {
     setTitles(prev => prev.map((t, i) => 

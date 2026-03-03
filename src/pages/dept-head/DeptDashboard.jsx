@@ -23,7 +23,7 @@ const DeptDashboard = () => {
   const { user, getPendingStudents, users, getUsersByDepartment } = useAuth();
   const { getStatsByDepartment, getGroupsByDepartment, getProposalsByDepartment, isReadOnly, academicYear } = useProject();
 
-  const department = user?.department;
+  const department = user?.department;    
   const stats = getStatsByDepartment(department);
   
   // Semester awareness: Only show pending registrations and proposals in Semester 1
@@ -82,7 +82,7 @@ const DeptDashboard = () => {
       color: 'bg-yellow-500'
     }
   ].filter(action => {
-    if (!isSemester1 && (action.title === 'Student Registrations' || action.title === 'Proposal Evaluation')) {
+    if (!isSemester1 && (action.title === 'Student Registrations' || action.title === 'Proposal Evaluation' || action.title === 'Group Formation')) {
       return false;
     }
     return true;
@@ -202,6 +202,7 @@ const DeptDashboard = () => {
             value={pendingStudents.length}
             icon={UserPlus}
             color={pendingStudents.length > 0 ? 'yellow' : 'green'}
+            onClick={() => !isReadOnly && navigate('/dept-head/registrations')}
           />
         )}
         {isSemester1 && (
@@ -210,11 +211,13 @@ const DeptDashboard = () => {
             value={pendingProposals.length}
             icon={FileText}
             color={pendingProposals.length > 0 ? 'yellow' : 'green'}
+            onClick={() => !isReadOnly && navigate('/dept-head/proposals')}
           />
         )}
         <MetricCard
           title="Active Students"
           value={activeStudentsCount}
+            onClick={() => !isReadOnly && navigate('/dept-head/students')}
           icon={Users}
           color="teal"
         />

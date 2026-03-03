@@ -13,7 +13,7 @@ import SemesterLock from '../../components/common/SemesterLock';
 
 const ProjectMarketplace = () => {
   const { user, users, updateUser } = useAuth();
-  const { proposals, groups, assignAdvisorToGroup, projectSettings, academicYear } = useProject();
+  const { proposals, groups, assignAdvisorToGroup, projectSettings, academicYear, projectDomains } = useProject();
   const { notifyProjectClaim } = useNotification();
 
   if (academicYear?.semester === 2) {
@@ -66,14 +66,10 @@ const ProjectMarketplace = () => {
   ];
 
   const domains = [
-    { value: '', label: 'All Domains' },
-    { value: 'Web Development', label: 'Web Development' },
-    { value: 'Mobile Application', label: 'Mobile Application' },
-    { value: 'Machine Learning', label: 'Machine Learning' },
-    { value: 'Data Science', label: 'Data Science' },
-    { value: 'Cybersecurity', label: 'Cybersecurity' },
-    { value: 'IoT', label: 'IoT' },
-    { value: 'Cloud Computing', label: 'Cloud Computing' }
+    { value: '', label: 'All Domains' }, 
+    ...projectDomains.map(d => ({
+      value: d, label: d
+    }))
   ];
 
   const handleClaimProject = () => {

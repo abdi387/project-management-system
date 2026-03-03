@@ -1,8 +1,12 @@
+// src/pages/dept-head/RegisteredStudents.jsx
+
 import React from 'react';
-import { Mail, Phone } from 'lucide-react';
+import { Mail, Phone, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import DataTable from '../../components/common/DataTable';
 import StatusBadge from '../../components/common/StatusBadge';
+import Button from '../../components/common/Button';
+import { generateRegisteredStudentsPDF, downloadPDF } from '../../utils/pdfGenerator'; 
 
 const RegisteredStudents = () => {
   const { user, getUsersByDepartment } = useAuth();
@@ -18,14 +22,9 @@ const RegisteredStudents = () => {
       key: 'name', 
       label: 'Student Name',
       render: (value, row) => (
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
-            {value.charAt(0)}
-          </div>
-          <div>
-            <div className="font-medium text-gray-900">{value}</div>
-            <div className="text-xs text-gray-500">{row.studentId}</div>
-          </div>
+        <div>
+          <div className="font-medium text-gray-900">{value}</div>
+          <div className="text-xs text-gray-500">ID: {row.studentId}</div>
         </div>
       )
     },
@@ -60,14 +59,24 @@ const RegisteredStudents = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-gray-900">Registered Students</h1>
-          <p className="text-gray-500">4th Year Students - {department} Department</p>
+          <div className="flex items-center gap-3">
+              {/* Temporarily using a standard button for debugging visibility */}
+              <button onClick={() => {
+                const doc = generateRegisteredStudentsPDF(students, department); 
+                downloadPDF(doc, `Registered_Students_${department}`);
+              }} className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <FileText className="w-4 h-4" />
+                Export PDF
+              </button>
+            <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-2 rounded-lg">
+              Total: {students.length}
+            </span>
+          </div>
         </div>
-        <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium">
-          Total: {students.length} Students
-        </div>
+        <p className="text-gray-500 mt-1">4th Year Students - {department} Department</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">

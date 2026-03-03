@@ -1,3 +1,5 @@
+// src/components/notifications/NotificationList.jsx
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle, AlertCircle, Info, Clock, FileText, Calendar, HelpCircle, UserPlus, MessageSquare } from 'lucide-react';

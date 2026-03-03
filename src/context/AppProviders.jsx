@@ -1,3 +1,5 @@
+// src/context/AppProviders.jsx
+
 import React from 'react';
 import { AuthProvider } from './AuthContext';
 import { ProjectProvider } from './ProjectContext';

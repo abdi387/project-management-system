@@ -1,3 +1,5 @@
+// src/pages/faculty-head/FacultyRepository.jsx
+
 import React, { useState, useEffect } from 'react';
 import { Archive, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';

@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }) => {
         name: 'Mr. Yohannes Girma',
         department: 'Computer Science',
         status: 'active',
-        maxGroups: 5,
+        maxGroups: 2,
         currentGroups: 0,
         createdAt: new Date().toISOString()
       }

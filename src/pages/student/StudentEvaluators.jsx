@@ -1,3 +1,5 @@
+// src/pages/student/StudentEvaluators.jsx
+
 import React from 'react';
 import { Shield, Mail, Building, UserCheck, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';

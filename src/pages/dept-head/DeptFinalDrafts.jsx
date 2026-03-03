@@ -1,5 +1,7 @@
+// src/pages/dept-head/DeptFinalDrafts.jsx
+
 import React from 'react';
-import { CheckCircle, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext'; 
 import { useProject } from '../../context/ProjectContext';
 import DataTable from '../../components/common/DataTable';
@@ -7,7 +9,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 
 const DeptFinalDrafts = () => {
   const { user, users } = useAuth();
-  const { finalDrafts, groups, approveFinalDraftByDept, academicYear } = useProject();
+  const { finalDrafts, groups, academicYear } = useProject();
 
   const department = user?.department;
 
@@ -30,6 +32,16 @@ const DeptFinalDrafts = () => {
       render: (_, draft) => {
         const group = groups.find(g => g.id === draft.groupId);
         return <span className="font-medium text-gray-900">{group?.name || 'Unknown'}</span>;
+      }
+    },
+    {
+      key: 'section',
+      label: 'Section',
+      render: (_, draft) => {
+        const group = groups.find(g => g.id === draft.groupId);
+        if (!group || !group.members || group.members.length === 0) return 'N/A';
+        const firstMember = users.find(u => u.id === group.members[0]);
+        return firstMember?.section || 'N/A';
       }
     },
     {

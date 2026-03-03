@@ -1,3 +1,4 @@
+// src/components/common/ConfirmationModal
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Info } from 'lucide-react';

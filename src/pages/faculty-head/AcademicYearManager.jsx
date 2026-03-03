@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 
 const AcademicYearManager = () => {
   const { users } = useAuth();
-  const { academicYear, groups, proposals, projectSettings, updateMaxGroupsPerAdvisor, setSemester, terminateSemester, startNewAcademicYear, getNextAcademicYear } = useProject();
+  const { academicYear, groups, proposals, projectSettings, updateMaxGroupsPerAdvisor, setSemester, archiveAdvisorSemesterData, terminateSemester, startNewAcademicYear, getNextAcademicYear } = useProject();
 
   const [maxGroupsInput, setMaxGroupsInput] = useState(projectSettings.maxGroupsPerAdvisor);
   const [loading, setLoading] = useState(false);
@@ -40,7 +40,9 @@ const AcademicYearManager = () => {
   const archiveData = () => {
     const currentRepository = JSON.parse(localStorage.getItem('fypRepository') || '[]');
     
-    const newArchives = groups.map(group => {
+    const groupsToArchive = groups.filter(g => g.academicYear === academicYear.current);
+
+    const newArchives = groupsToArchive.map(group => {
       const approvedProposal = proposals?.find(p => p.groupId === group.id && p.status === 'approved');
       // Prioritize title from the approved proposal, fall back to the one on the group object
       const titleSource = approvedProposal?.approvedTitle || group.approvedTitle;
@@ -81,7 +83,8 @@ const AcademicYearManager = () => {
     if (!targetSemester) return;
     setLoading(true);
     try {
-      archiveData(); // Archive current semester data before switching
+      archiveData();
+      archiveAdvisorSemesterData();
       setSemester(targetSemester);
       const phase = targetSemester === 1 ? 'Documentation Phase' : 'Implementation Phase';
       toast.success(`Successfully switched to Semester ${targetSemester} (${phase}). Notifications have been sent to all users.`);
@@ -96,6 +99,7 @@ const AcademicYearManager = () => {
     try {
       // 1. Archive current projects (Semester 2 usually)
       archiveData();
+      // archiveAdvisorSemesterData is called internally by terminateSemester
 
       // 2. Terminate Semester
       terminateSemester();

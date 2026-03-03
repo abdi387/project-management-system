@@ -47,7 +47,7 @@ import ClaimedProjects from './pages/dept-head/ClaimedProjects';
 import ProgressMonitoring from './pages/dept-head/ProgressMonitoring';
 import DeptReports from './pages/dept-head/DeptReports';
 import DeptDefenseSchedule from './pages/dept-head/DeptDefenseSchedule';
-import DeptFinalDrafts from './components/layout/DeptFinalDrafts';
+import DeptFinalDrafts from './pages/dept-head/DeptFinalDrafts';
 
 // Faculty Head Pages
 import FacultyDashboard from './pages/faculty-head/FacultyDashboard';
@@ -58,6 +58,7 @@ import VenueManagement from './pages/faculty-head/VenueManagement';
 import FacultyReports from './pages/faculty-head/FacultyReports';
 import FacultyRepository from './pages/faculty-head/FacultyRepository';
 import AcademicYearManager from './pages/faculty-head/AcademicYearManager';
+import ProjectDomains from './pages/faculty-head/ProjectDomains';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -304,6 +305,11 @@ function App() {
               <Route path="/faculty-head/academic-year" element={
                 <ProtectedRoute allowedRoles={['faculty-head']}>
                   <AcademicYearManager />
+                </ProtectedRoute>
+              } />
+              <Route path="/faculty-head/domains" element={
+                <ProtectedRoute allowedRoles={['faculty-head']}>
+                  <ProjectDomains />
                 </ProtectedRoute>
               } />
 

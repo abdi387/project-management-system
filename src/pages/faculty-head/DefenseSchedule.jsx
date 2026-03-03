@@ -1,6 +1,6 @@
 // src/pages/faculty-head/DefenseSchedule.jsx
 import React, { useState } from 'react';
-import { Calendar, Download, Clock, Users, Sparkles } from 'lucide-react';
+import { Calendar, Clock, Users, Sparkles, PlusCircle, AlertTriangle, CheckCircle2, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
 import { useNotification } from '../../context/NotificationContext';
@@ -9,13 +9,13 @@ import InputField from '../../components/common/InputField';
 import SelectDropdown from '../../components/common/SelectDropdown';
 import Modal from '../../components/common/Modal';
 import DataTable from '../../components/common/DataTable';
-import { generateDefenseSchedulePDF, downloadPDF } from '../../utils/pdfGenerator';
+import { generateFacultyDefenseSchedulePDF, downloadPDF } from '../../utils/pdfGenerator';
 import { formatDate } from '../../utils/dateUtils';
 import toast from 'react-hot-toast';
 
 const DefenseSchedule = () => {
   const { users } = useAuth();
-  const { groups, getDefenseSchedules, addDefenseSchedule, academicYear, venues: managedVenues } = useProject();
+  const { groups, getDefenseSchedules, addDefenseSchedule, academicYear, venues: managedVenues, addVenue } = useProject();
   const { notifyDefenseSchedule, notifyDefenseDuty, notifyDeptHeadDefenseScheduled } = useNotification();
 
   const allSchedules = getDefenseSchedules();
@@ -23,8 +23,17 @@ const DefenseSchedule = () => {
   const defenseSchedules = allSchedules.filter(s => (s.semester || 1) === academicYear.semester);
 
   // Get groups ready for defense (evaluators assigned)
-  const readyGroups = groups.filter(g => g.evaluators && g.evaluators.length > 0);
+  const readyGroups = groups.filter(g => 
+    g.academicYear === academicYear.current && 
+    g.evaluators && 
+    g.evaluators.length > 0
+  );
   const unscheduledGroups = readyGroups.filter(g => !defenseSchedules.find(s => s.groupId === g.id));
+
+  // Calculate distinct evaluator panels (committees)
+  const uniquePanelsCount = new Set(
+    unscheduledGroups.map(g => g.evaluators?.map(e => e.id).sort().join('-')).filter(Boolean)
+  ).size;
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAutoModal, setShowAutoModal] = useState(false);
@@ -37,10 +46,11 @@ const DefenseSchedule = () => {
   });
   const [autoConfig, setAutoConfig] = useState({
     startDate: new Date().toISOString().split('T')[0],
-    startTime: '08:30',
+    startTime: '08:00',
     duration: 45,
     venues: managedVenues.slice(0, 2).map(v => v.name)
   });
+  const [newVenueName, setNewVenueName] = useState('');
 
   const venueOptions = managedVenues.map(v => ({ value: v.name, label: v.name }));
 
@@ -100,9 +110,29 @@ const DefenseSchedule = () => {
     }
   };
 
+  const handleQuickAddVenue = () => {
+    if (!newVenueName.trim()) return;
+    const result = addVenue(newVenueName);
+    if (result.success) {
+      toast.success('Venue added successfully!');
+      // Auto-select the new venue
+      setAutoConfig(prev => ({
+        ...prev,
+        venues: [...prev.venues, newVenueName.trim()]
+      }));
+      setNewVenueName('');
+    } else {
+      toast.error(result.error);
+    }
+  };
+
   const handleAutoSchedule = async () => {
     // Filter groups that have evaluators assigned
-    const validGroups = groups.filter(g => g.evaluators && g.evaluators.length > 0);
+    const validGroups = groups.filter(g => 
+      g.academicYear === academicYear.current && 
+      g.evaluators && 
+      g.evaluators.length > 0
+    );
 
     // Filter groups that need scheduling
     const unscheduledGroups = validGroups.filter(g => !defenseSchedules.find(s => s.groupId === g.id));
@@ -113,61 +143,114 @@ const DefenseSchedule = () => {
     }
     setLoading(true);
     try {
-      // Track busy slots to prevent conflicts
-      // Format: "YYYY-MM-DD-HH:MM"
-      const evaluatorBusySlots = new Set(); 
+      // 1. Group by Evaluator Panel to ensure joint evaluation consistency
+      // Groups with the exact same evaluators are treated as a batch
+      const panelGroups = {};
+      unscheduledGroups.forEach(g => {
+        const evaluatorIds = g.evaluators?.map(e => e.id).sort().join('-') || 'no-evaluators';
+        if (!panelGroups[evaluatorIds]) {
+          panelGroups[evaluatorIds] = {
+            evaluators: g.evaluators,
+            groups: []
+          };
+        }
+        panelGroups[evaluatorIds].groups.push(g);
+      });
+
+      // Sort panels by size (descending) to handle largest blocks first
+      const panels = Object.values(panelGroups).sort((a, b) => b.groups.length - a.groups.length);
+
+      const scheduledData = [];
+      const evaluatorBusySlots = new Set();
       const venueBusySlots = new Set();
 
-      // Helper to generate key
-      const getSlotKey = (date, time) => `${date}-${time}`;
+      // Setup time boundaries
+      let currentDate = new Date(autoConfig.startDate);
+      const [startH, startM] = autoConfig.startTime.split(':').map(Number);
+      
+      // Ensure we start at the configured time
+      currentDate.setHours(startH, startM, 0, 0);
 
-      // Helper to check availability
-      const isSlotAvailable = (date, time, venue, evaluators) => {
-        const slotKey = getSlotKey(date, time);
+      let groupsRemaining = unscheduledGroups.length;
+      let safetyCounter = 0;
+      const MAX_SLOTS_CHECK = 5000; // Safety break to prevent infinite loops
+
+      const getKey = (date, time) => `${date}-${time}`;
+
+      while (groupsRemaining > 0 && safetyCounter < MAX_SLOTS_CHECK) {
+        // Define block boundaries for the current day
+        const morningEnd = new Date(currentDate);
+        morningEnd.setHours(12, 0, 0, 0); // End of morning block
         
-        // Check Venue
-        if (venueBusySlots.has(`${venue}-${slotKey}`)) return false;
+        const afternoonStart = new Date(currentDate);
+        afternoonStart.setHours(14, 0, 0, 0); // Start of afternoon block
+        
+        const afternoonEnd = new Date(currentDate);
+        afternoonEnd.setHours(17, 0, 0, 0); // End of afternoon block
 
-        // Check Evaluators
-        if (evaluators && evaluators.length > 0) {
-          for (const evaluator of evaluators) {
-            if (evaluatorBusySlots.has(`${evaluator.id}-${slotKey}`)) return false;
+        // Current time checks
+        const currentH = currentDate.getHours();
+        let isMorning = currentH < 12;
+        let isAfternoon = currentH >= 14 && currentH < 17;
+
+        // Handle day transitions and breaks
+        if (currentDate >= afternoonEnd) {
+          // Move to next day
+          currentDate.setDate(currentDate.getDate() + 1);
+          currentDate.setHours(startH, startM, 0, 0);
+          safetyCounter++;
+          continue;
+        }
+
+        if (currentDate >= morningEnd && currentDate < afternoonStart) {
+          // Move to afternoon block
+          currentDate.setHours(14, 0, 0, 0);
+          isAfternoon = true;
+          isMorning = false;
+        }
+
+        // Calculate slot end
+        const slotEndTime = new Date(currentDate.getTime() + autoConfig.duration * 60000);
+        
+        // Check if slot fits in current block
+        const fitsMorning = isMorning && slotEndTime <= morningEnd;
+        const fitsAfternoon = isAfternoon && slotEndTime <= afternoonEnd;
+
+        if (!fitsMorning && !fitsAfternoon) {
+          // Advance to next valid block
+          if (isMorning) {
+            currentDate.setHours(14, 0, 0, 0);
+          } else {
+            currentDate.setDate(currentDate.getDate() + 1);
+            currentDate.setHours(startH, startM, 0, 0);
           }
+          safetyCounter++;
+          continue;
         }
-        return true;
-      };
 
-      // Helper to mark slot as busy
-      const markSlotBusy = (date, time, venue, evaluators) => {
-        const slotKey = getSlotKey(date, time);
-        venueBusySlots.add(`${venue}-${slotKey}`);
-        
-        if (evaluators && evaluators.length > 0) {
-          evaluators.forEach(ev => evaluatorBusySlots.add(`${ev.id}-${slotKey}`));
-        }
-      };
+        // Attempt to schedule in this slot
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const timeStr = currentDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const slotKey = getKey(dateStr, timeStr);
 
-      // Initialize scheduling cursor
-      let currentDate = new Date(`${autoConfig.startDate}T${autoConfig.startTime}`);
-      const duration = parseInt(autoConfig.duration);
+        // Try to utilize ALL venues for this time slot
+        for (const venue of autoConfig.venues) {
+          if (venueBusySlots.has(`${venue}-${slotKey}`)) continue;
 
-      for (const group of unscheduledGroups) {
-        let scheduled = false;
-        let searchDate = new Date(currentDate); // Clone to search forward without moving global cursor too fast
-        let attempts = 0;
+          // Find a panel that is free
+          for (const panel of panels) {
+            if (panel.groups.length === 0) continue;
 
-        // Find next available slot (Round)
-        while (!scheduled && attempts < 500) { // Safety break
-          const dateStr = searchDate.toISOString().split('T')[0];
-          const timeStr = searchDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            const evaluators = panel.evaluators || [];
+            const isPanelFree = evaluators.every(e => !evaluatorBusySlots.has(`${e.id}-${slotKey}`));
 
-          // Try all selected venues for this time slot
-          for (const venue of autoConfig.venues) {
-            if (isSlotAvailable(dateStr, timeStr, venue, group.evaluators)) {
+            if (isPanelFree) {
+              // Schedule group
+              const group = panel.groups.shift();
               const title = group.approvedTitle;
               const projectTitle = (typeof title === 'object' && title !== null) ? title.title : title;
-              // Found a slot!
-              addDefenseSchedule({
+
+              scheduledData.push({
                 groupId: group.id,
                 groupName: group.name,
                 projectTitle: projectTitle,
@@ -179,34 +262,42 @@ const DefenseSchedule = () => {
                 semester: academicYear.semester
               });
 
-              markSlotBusy(dateStr, timeStr, venue, group.evaluators);
+              // Mark resources busy
+              venueBusySlots.add(`${venue}-${slotKey}`);
+              evaluators.forEach(e => evaluatorBusySlots.add(`${e.id}-${slotKey}`));
               
-              // Notifications
-              group.members?.forEach(mId => notifyDefenseSchedule(mId, dateStr, timeStr, venue));
-              group.evaluators?.forEach(ev => notifyDefenseDuty(ev.id, group.name, group.id, dateStr, timeStr, venue));
-              notifyDeptHeadDefenseScheduled(group.department, group.name, dateStr, timeStr, venue);
-
-              scheduled = true;
-              break; // Break venue loop, move to next group
+              groupsRemaining--;
+              break; // Move to next venue
             }
           }
-
-          if (!scheduled) {
-            // Move to next time slot (Round)
-            searchDate.setMinutes(searchDate.getMinutes() + duration);
-            
-            // If past 5 PM (17:00), move to next day 8:30 AM
-            if (searchDate.getHours() >= 17) {
-              searchDate.setDate(searchDate.getDate() + 1);
-              const [h, m] = autoConfig.startTime.split(':');
-              searchDate.setHours(parseInt(h), parseInt(m), 0, 0);
-            }
-          }
-          attempts++;
         }
+
+        // Advance time
+        currentDate = slotEndTime;
+        safetyCounter++;
       }
       
-      toast.success(`Automatically scheduled ${unscheduledGroups.length} defenses!`);
+      if (groupsRemaining > 0) {
+        toast.error(
+          "Unable to schedule all groups. Possible solutions: reduce the number of evaluators per group or add additional evaluators. Ensure advisors don't evaluate their own groups.",
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      // Commit schedules
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      scheduledData.forEach(s => {
+        addDefenseSchedule(s);
+        // Notifications
+        const group = groups.find(g => g.id === s.groupId);
+        group?.members?.forEach(mId => notifyDefenseSchedule(mId, s.date, s.time, s.venue));
+        group?.evaluators?.forEach(ev => notifyDefenseDuty(ev.id, s.groupName, s.groupId, s.date, s.time, s.venue));
+        notifyDeptHeadDefenseScheduled(s.department, s.groupName, s.date, s.time, s.venue);
+      });
+
+      toast.success(`Automatically scheduled ${scheduledData.length} defenses!`);
       setShowAutoModal(false);
     } finally {
       setLoading(false);
@@ -214,23 +305,34 @@ const DefenseSchedule = () => {
   };
 
   const handleExportPDF = () => {
-    const schedulesWithDetails = defenseSchedules.map(s => ({
-      ...s,
-      evaluators: s.evaluators?.map(e => e.name) || []
-    }));
-    
-    const doc = generateDefenseSchedulePDF(schedulesWithDetails);
-    downloadPDF(doc, `Defense_Schedule_${new Date().toISOString().split('T')[0]}`);
+    const doc = generateFacultyDefenseSchedulePDF(defenseSchedules, users, groups);
+    downloadPDF(doc, `Faculty_Defense_Schedule_${new Date().toISOString().split('T')[0]}`);
   };
 
   const columns = [
     { key: 'groupName', label: 'Group' },
+    {
+      key: 'section',
+      label: 'Section',
+      render: (_, row) => {
+        const group = groups.find(g => g.id === row.groupId);
+        return users.find(u => u.id === group?.members?.[0])?.section || 'N/A';
+      }
+    },
     { 
       key: 'members', 
       label: 'Group Members',
       render: (_, row) => {
         const group = groups.find(g => g.id === row.groupId);
-        return group?.members?.map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', ') || '-';
+        if (!group?.members || group.members.length === 0) return '-';
+        return (
+          <div className="flex flex-col">
+            {group.members.map(id => {
+              const member = users.find(u => u.id === id);
+              return member ? <span key={id}>{member.name}</span> : null;
+            })}
+          </div>
+        );
       }
     },
     { key: 'projectTitle', label: 'Project Title' },
@@ -241,36 +343,58 @@ const DefenseSchedule = () => {
     {
       key: 'evaluators',
       label: 'Evaluators',
-      render: (evaluators) => evaluators?.map(e => e.name).join(', ') || '-'
+      render: (evaluators) => {
+        if (!evaluators || evaluators.length === 0) return '-';
+        return (
+          <div className="flex flex-col">
+            {evaluators.map(e => <span key={e.id || e.name}>{e.name}</span>)}
+          </div>
+        );
+      }
     }
   ];
 
   const pendingColumns = [
     { key: 'name', label: 'Group' },
+    {
+      key: 'section',
+      label: 'Section',
+      render: (_, group) => {
+        return users.find(u => u.id === group?.members?.[0])?.section || 'N/A';
+      }
+    },
     { key: 'approvedTitle', label: 'Project Title', render: (title) => (typeof title === 'object' ? title?.title : title) || 'N/A' },
     { key: 'department', label: 'Department' },
     { 
       key: 'evaluators', 
       label: 'Assigned Evaluators',
-      render: (evaluators) => evaluators?.map(e => e.name).join(', ') || '-'
+      render: (evaluators) => {
+        if (!evaluators || evaluators.length === 0) return '-';
+        return (
+          <div className="flex flex-col">
+            {evaluators.map(e => <span key={e.id || e.name}>{e.name}</span>)}
+          </div>
+        );
+      }
     }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-gray-900">Defense Scheduling</h1>
-          <p className="text-gray-500">Schedule and manage final project defenses</p>
+          <div className="flex items-center gap-3">
+            <button onClick={handleExportPDF} className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              <FileText className="w-4 h-4" />
+              Export PDF
+            </button>
+            <Button variant="secondary" onClick={() => setShowAutoModal(true)} icon={Sparkles}>
+              Auto Schedule
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={handleExportPDF} icon={Download}>
-            Export PDF
-          </Button>
-          <Button variant="secondary" onClick={() => setShowAutoModal(true)} icon={Sparkles}>
-            Auto Schedule
-          </Button>
-        </div>
+        <p className="text-gray-500 mt-1">Schedule and manage final project defenses</p>
       </div>
 
       {/* Stats */}
@@ -406,8 +530,40 @@ const DefenseSchedule = () => {
                 <p className="font-medium text-blue-900">Automated Scheduling</p>
                 <p className="text-sm text-blue-800 mt-1">
                   This will automatically assign dates, times, and venues to all {readyGroups.length - defenseSchedules.length} unscheduled groups.
-                  Notifications will be sent to all students and evaluators.
                 </p>
+                
+                {/* Capacity Analysis */}
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-blue-800">Groups to Schedule:</span>
+                    <span className="font-medium text-blue-900">{unscheduledGroups.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-blue-800">Distinct Evaluator Panels:</span>
+                    <span className="font-medium text-blue-900">{uniquePanelsCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-800">Selected Venues:</span>
+                    <span className={`font-medium ${autoConfig.venues.length < uniquePanelsCount ? 'text-orange-600' : 'text-green-600'}`}>
+                      {autoConfig.venues.length}
+                    </span>
+                  </div>
+                  
+                  {autoConfig.venues.length < uniquePanelsCount ? (
+                    <div className="flex items-start gap-2 mt-2 text-xs text-orange-700 bg-orange-50 p-2 rounded border border-orange-100">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                      <p>
+                        For optimal parallel scheduling, you need at least <strong>{uniquePanelsCount}</strong> venues. 
+                        Current selection may require sequential slots, extending the total duration.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 mt-2 text-xs text-green-700 bg-green-50 p-2 rounded border border-green-100">
+                      <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+                      <p>Sufficient venues selected for full parallel evaluation.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -461,6 +617,23 @@ const DefenseSchedule = () => {
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-1">Select multiple venues to schedule concurrent defenses.</p>
+          </div>
+
+          {/* Quick Add Venue */}
+          <div className="pt-2 border-t border-gray-100">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Need more venues?</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newVenueName}
+                onChange={(e) => setNewVenueName(e.target.value)}
+                placeholder="Enter new venue name..."
+                className="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+              />
+              <Button type="button" size="sm" onClick={handleQuickAddVenue} icon={PlusCircle} disabled={!newVenueName.trim()}>
+                Add
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>

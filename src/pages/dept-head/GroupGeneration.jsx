@@ -1,6 +1,6 @@
 // src/pages/dept-head/GroupGeneration.jsx
 import React, { useState } from 'react';
-import { Users, Settings, Play, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, Play, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
 import { useGroupFormation } from '../../hooks/useGroupFormation';
@@ -12,18 +12,31 @@ import toast from 'react-hot-toast';
 
 const GroupGeneration = () => {
   const { user, getUsersByDepartment, users } = useAuth();
-  const { getGroupsByDepartment } = useProject();
+  const { getGroupsByDepartment, academicYear } = useProject();
   const { formGroups, calculateGroupDistribution, loading, error } = useGroupFormation();
-
-  const department = user?.department;
-  const existingGroups = getGroupsByDepartment(department);
-  const students = getUsersByDepartment(department).filter(
-    u => u.role === 'student' && u.status === 'active'
-  );
 
   const [maxPerGroup, setMaxPerGroup] = useState(4);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [generatedGroups, setGeneratedGroups] = useState([]);
+
+  const department = user?.department;
+  const isSemester1 = academicYear?.semester === 1;
+  const existingGroups = getGroupsByDepartment(department) || [];
+
+  // Filter out students who are already in a group (from DB or current session)
+  const groupedStudentIds = new Set([
+    ...existingGroups.flatMap(g => g.members || []),
+    ...generatedGroups.flatMap(g => g.members || [])
+  ]);
+
+  // Group formation is a semester 1 activity. In a new academic year, old data should not be shown.
+  const students = isSemester1
+    ? getUsersByDepartment(department).filter(
+        u => u.role === 'student' && 
+             u.status === 'active' &&
+             !groupedStudentIds.has(u.id)
+      )
+    : [];
 
   // Calculate distribution preview
   const distribution = calculateGroupDistribution(students.length, maxPerGroup);
@@ -40,8 +53,25 @@ const GroupGeneration = () => {
     }
   };
 
-  // Combine existing and newly generated groups for display
-  const allGroups = [...existingGroups, ...generatedGroups];
+  // In Semester 1, we only want to show newly created groups.
+  // If it's not Sem 1, we show the existing groups from the database.
+  // This prevents showing stale group data at the start of a new academic year.
+  const allGroups = isSemester1 ? generatedGroups : existingGroups;
+
+  // Group students by section
+  const studentsBySection = students.reduce((acc, student) => {
+    const section = student.section || 'Uncategorized';
+    if (!acc[section]) {
+      acc[section] = [];
+    }
+    acc[section].push(student);
+    return acc;
+  }, {});
+
+  // Sort students within each section by CGPA
+  Object.keys(studentsBySection).forEach(section => {
+    studentsBySection[section].sort((a, b) => b.cgpa - a.cgpa);
+  });
 
   const groupColumns = [
     { key: 'name', label: 'Group Name' },
@@ -54,7 +84,7 @@ const GroupGeneration = () => {
       key: 'leader',
       label: 'Leader',
       render: (leaderId, row) => {
-        const leader = students.find(s => s.id === leaderId);
+        const leader = users.find(s => s.id === leaderId);
         return leader?.name || 'N/A';
       }
     },
@@ -84,6 +114,24 @@ const GroupGeneration = () => {
           </div>
         ) : 'Unknown';
       }
+    }
+  ];
+
+  const studentColumns = [
+    { key: 'name', label: 'Name' },
+    { key: 'studentId', label: 'Student ID' },
+    { 
+      key: 'cgpa', 
+      label: 'CGPA',
+      render: (value) => (
+        <span className={`font-medium ${
+          value >= 3.5 ? 'text-green-600' : 
+          value >= 3.0 ? 'text-blue-600' : 
+          'text-gray-600'
+        }`}>
+          {value?.toFixed(2)}
+        </span>
+      )
     }
   ];
 
@@ -156,16 +204,22 @@ const GroupGeneration = () => {
             <Button
               onClick={() => setShowConfirmModal(true)}
               icon={Play}
-              disabled={students.length < maxPerGroup || existingGroups.length > 0}
+              // In Semester 1, allow generation. Disable after new groups have been generated in the current session.
+              // This works around stale `existingGroups` data from previous semesters.
+              disabled={!isSemester1 || students.length < maxPerGroup || (isSemester1 && generatedGroups.length > 0)}
               fullWidth
             >
-              Generate Groups
+              {isSemester1 ? 'Generate Groups' : 'Unavailable'}
             </Button>
-            {existingGroups.length > 0 && (
-              <p className="text-xs text-yellow-600 mt-2">
-                Groups already exist for this department.
+            {!isSemester1 ? (
+              <p className="text-xs text-red-600 mt-2">
+                Group formation is only available in Semester 1.
               </p>
-            )}
+            ) : existingGroups.length > 0 && generatedGroups.length === 0 ? (
+              <p className="text-xs text-yellow-600 mt-2">
+                Note: Existing groups detected. Generation is enabled for the new semester.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -175,25 +229,21 @@ const GroupGeneration = () => {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Available Students ({students.length})
         </h2>
-        <DataTable
-          columns={[
-            { key: 'name', label: 'Name' },
-            { key: 'studentId', label: 'Student ID' },
-            { key: 'section', label: 'Section' },
-            { 
-              key: 'cgpa', 
-              label: 'CGPA',
-              render: (value) => (
-                <span className={`font-medium ${value >= 3.5 ? 'text-green-600' : value >= 3.0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                  {value?.toFixed(2)}
-                </span>
-              )
-            }
-          ]}
-          data={students.sort((a, b) => b.cgpa - a.cgpa)}
-          pageSize={10}
-          searchable
-        />
+        <div className="space-y-8">
+          {Object.keys(studentsBySection).sort().map(section => (
+            <div key={section}>
+              <h3 className="text-md font-semibold text-gray-800 mb-3 border-b pb-2">
+                Section: {section} ({studentsBySection[section].length} students)
+              </h3>
+              <DataTable
+                columns={studentColumns}
+                data={studentsBySection[section]}
+                pageSize={5}
+                searchable
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Existing Groups */}

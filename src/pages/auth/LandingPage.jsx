@@ -83,7 +83,7 @@ const LandingPage = () => {
   const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
   const [formData, setFormData] = useState({
     name: '', email: '', password: '', confirmPassword: '',
-    studentId: '', department: '', section: '', cgpa: ''
+    studentId: '', department: '', section: '', cgpa: '', gender: ''
   });
   const [errors, setErrors] = useState({});
 
@@ -179,6 +179,7 @@ const LandingPage = () => {
 
     if (!formData.department) newErrors.department = 'Department is required';
     if (!formData.section) newErrors.section = 'Section is required';
+    if (!formData.gender) newErrors.gender = 'Gender is required';
 
     if (!formData.cgpa) {
       newErrors.cgpa = 'CGPA is required';
@@ -532,6 +533,36 @@ const LandingPage = () => {
             <InputField label="CGPA" name="cgpa" type="number" step="0.01" value={formData.cgpa} onChange={handleChange} error={errors.cgpa} required />
             <SelectDropdown label="Department" name="department" value={formData.department} onChange={handleChange} options={departments} error={errors.department} required />
             <SelectDropdown label="Section" name="section" value={formData.section} onChange={handleChange} options={sections} error={errors.section} required />
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Gender <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-6 h-[46px] items-center">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="gender"
+                    value="male"
+                    checked={formData.gender === 'male'}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-violet-600 focus:ring-violet-500"
+                  />
+                  <span className="text-sm text-slate-700">Male</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="gender"
+                    value="female"
+                    checked={formData.gender === 'female'}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-violet-600 focus:ring-violet-500"
+                  />
+                  <span className="text-sm text-slate-700">Female</span>
+                </label>
+              </div>
+              {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender}</p>}
+            </div>
             <InputField label="Password" name="password" type="password" value={formData.password} onChange={handleChange} error={errors.password} required />
             <InputField label="Confirm Password" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} error={errors.confirmPassword} required />
           </div>

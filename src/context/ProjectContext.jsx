@@ -16,18 +16,24 @@ export const useProject = () => {
 export const ProjectProvider = ({ children }) => {
   const { user, users } = useAuth();
   const notificationContext = useNotification();
-  
-  const { 
-    notifyDeptHeadProposalSubmission, 
-    notifyDeptHeadProjectClaim, 
-    notifyDeptHeadFinalDraft, 
-    notifyEvaluatorAssignment, 
-    notifyGroupEvaluatorsAssigned, 
-    notifySemesterChange, 
-    notifyYearStarted, 
-    notifySemesterTermination, 
-    notifyGroupFormation 
-  } = notificationContext || {};
+
+  // When contexts depend on each other, the dependent context might not be available on the initial render.
+  // By checking for its existence, we prevent the provider from crashing before it's ready.
+  if (!notificationContext) {
+    return null; // Or return a loading spinner component
+  }
+
+  const {
+    notifyDeptHeadProposalSubmission,
+    notifyDeptHeadProjectClaim,
+    notifyDeptHeadFinalDraft,
+    notifyEvaluatorAssignment,
+    notifyGroupEvaluatorsAssigned,
+    notifySemesterChange,
+    notifyYearStarted,
+    notifySemesterTermination,
+    notifyGroupFormation
+  } = notificationContext;
 
   // Groups State
   const [groups, setGroups] = useState(() => {
@@ -95,6 +101,23 @@ export const ProjectProvider = ({ children }) => {
     };
   });
 
+  // Project Domains State
+  const [projectDomains, setProjectDomains] = useState(() => {
+    const saved = localStorage.getItem('fypProjectDomains');
+    return saved ? JSON.parse(saved) : [
+      'Web Development',
+      'Mobile Application',
+      'Machine Learning',
+      'Data Science',
+      'Cybersecurity',
+      'IoT',
+      'Cloud Computing',
+      'Blockchain',
+      'Artificial Intelligence',
+      'Networking'
+    ];
+  });
+
   // Save to localStorage
   useEffect(() => {
     localStorage.setItem('fypGroups', JSON.stringify(groups));
@@ -131,6 +154,10 @@ export const ProjectProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('fypProjectSettings', JSON.stringify(projectSettings));
   }, [projectSettings]);
+
+  useEffect(() => {
+    localStorage.setItem('fypProjectDomains', JSON.stringify(projectDomains));
+  }, [projectDomains]);
 
   // Read-only logic for terminated semester
   const isReadOnly =
@@ -506,6 +533,14 @@ export const ProjectProvider = ({ children }) => {
       startDate: new Date().toISOString(),
       history: [...academicYear.history, closedYear]
     });
+
+    // Reset data for the new academic year
+    setGroups([]);
+    setProposals([]);
+    setProgressReports([]);
+    setFinalDrafts([]);
+    setDefenseSchedules([]);
+
     notifyYearStarted(newYearString);
   };
 
@@ -529,7 +564,7 @@ export const ProjectProvider = ({ children }) => {
     notifySemesterChange(newSemester);
   };
 
-  const terminateSemester = () => {
+  const archiveAdvisorSemesterData = () => {
     const currentYear = academicYear.current;
     const currentSemester = academicYear.semester;
     const currentSemesterKey = `semester${currentSemester}`;
@@ -578,7 +613,10 @@ export const ProjectProvider = ({ children }) => {
       });
       return newRepo;
     });
+  };
 
+  const terminateSemester = () => {
+    archiveAdvisorSemesterData();
     setAcademicYear(prev => ({ ...prev, status: 'terminated' }));
     if (notifySemesterTermination) {
       notifySemesterTermination();
@@ -654,6 +692,28 @@ export const ProjectProvider = ({ children }) => {
     };
   };
 
+  // Domain Functions
+  const addProjectDomain = (domain) => {
+    if (projectDomains.some(d => d.toLowerCase() === domain.toLowerCase())) {
+      return { success: false, error: 'Domain already exists' };
+    }
+    setProjectDomains(prev => [...prev, domain]);
+    return { success: true };
+  };
+
+  const removeProjectDomain = (domain) => {
+    setProjectDomains(prev => prev.filter(d => d !== domain));
+    return { success: true };
+  };
+
+  const updateProjectDomain = (oldDomain, newDomain) => {
+    if (projectDomains.some(d => d.toLowerCase() === newDomain.toLowerCase() && d !== oldDomain)) {
+       return { success: false, error: 'Domain already exists' };
+    }
+    setProjectDomains(prev => prev.map(d => d === oldDomain ? newDomain : d));
+    return { success: true };
+  };
+
   const value = {
     groups,
     proposals,
@@ -666,6 +726,7 @@ export const ProjectProvider = ({ children }) => {
     updateMaxGroupsPerAdvisor,
     isReadOnly,
     setSemester,
+    archiveAdvisorSemesterData,
     terminateSemester,
     createGroups,
     getGroupsByDepartment,
@@ -696,7 +757,11 @@ export const ProjectProvider = ({ children }) => {
     getFacultyStats,
     venues,
     addVenue,
-    removeVenue
+    removeVenue,
+    projectDomains,
+    addProjectDomain,
+    removeProjectDomain,
+    updateProjectDomain
   };
 
   return (

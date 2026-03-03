@@ -1,9 +1,11 @@
+// src/pages/dept-head/ClaimedProjects.jsx
 import React from 'react';
-import { UserCheck } from 'lucide-react';
+import { UserCheck, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
 import DataTable from '../../components/common/DataTable';
 import StatusBadge from '../../components/common/StatusBadge';
+import { generateClaimedProjectsPDF, downloadPDF } from '../../utils/pdfGenerator';
 
 const ClaimedProjects = () => {
   const { user, users } = useAuth();
@@ -12,6 +14,11 @@ const ClaimedProjects = () => {
   const department = user?.department;
   // Filter groups that have an advisor assigned
   const claimedGroups = getGroupsByDepartment(department).filter(g => g.advisorId);
+
+  const handleExportPDF = () => {
+    const doc = generateClaimedProjectsPDF(claimedGroups, department, users);
+    downloadPDF(doc, `Claimed_Projects_${department}`);
+  };
 
   const columns = [
     { 
@@ -85,15 +92,21 @@ const ClaimedProjects = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-gray-900">Claimed Projects</h1>
-          <p className="text-gray-500">{department} Department</p>
+          <div className="flex items-center gap-3">
+            <button onClick={handleExportPDF} className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              <FileText className="w-4 h-4" />
+              Export PDF
+            </button>
+            <span className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+              <UserCheck className="w-4 h-4" />
+              Total Claimed: {claimedGroups.length}
+            </span>
+          </div>
         </div>
-        <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-          <UserCheck className="w-4 h-4" />
-          Total Claimed: {claimedGroups.length}
-        </div>
+        <p className="text-gray-500 mt-1">{department} Department</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">

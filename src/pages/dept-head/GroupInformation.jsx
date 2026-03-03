@@ -1,9 +1,11 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
+import { FileText } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import StatusBadge from '../../components/common/StatusBadge';
 
+import { generateGroupInformationPDF, downloadPDF } from '../../utils/pdfGenerator';
 const GroupInformation = () => {
   const { user, users } = useAuth();
   const { getGroupsByDepartment } = useProject();
@@ -77,8 +79,8 @@ const GroupInformation = () => {
         if (evaluators && evaluators.length > 0) {
           return (
             <div className="flex flex-wrap gap-1">
-              {evaluators.map((e, i) => (
-                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium border border-blue-100">
+              {evaluators.map((e) => (
+                <span key={e.id} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium border border-blue-100">
                   {e.name}
                 </span>
               ))}
@@ -93,10 +95,23 @@ const GroupInformation = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Group Information</h1>
-        <p className="text-gray-500">{department} Department</p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold text-gray-900">Group Information</h1>
+          <div className="flex items-center gap-3">
+            <button onClick={() => {
+              const doc = generateGroupInformationPDF(groups, department, users);
+              downloadPDF(doc, `Group_Information_${department}`);
+            }} className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              <FileText className="w-4 h-4" />
+              Export PDF
+            </button>
+            <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-2 rounded-lg">
+              Total: {groups.length}
+            </span>
+          </div>
+        </div>
+        <p className="text-gray-500 mt-1">{department} Department</p>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <DataTable
           columns={columns}

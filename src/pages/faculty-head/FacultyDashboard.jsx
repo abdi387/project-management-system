@@ -21,12 +21,12 @@ const FacultyDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { getFacultyStats, getStatsByDepartment, academicYear, getDefenseSchedules, groups } = useProject();
-
-  const facultyStats = getFacultyStats();
-  const allSchedules = getDefenseSchedules();
-  const defenseSchedules = allSchedules.filter(s => (s.semester || 1) === academicYear.semester);
   // For faculty head, we check termination status directly to allow access to academic year management.
   const isTerminated = academicYear.status === 'terminated';
+
+  const facultyStats = isTerminated ? { totalGroups: 0, approvedProposals: 0, completedProjects: 0, inactiveGroups: 0 } : getFacultyStats();
+  const allSchedules = getDefenseSchedules();
+  const defenseSchedules = isTerminated ? [] : allSchedules.filter(s => (s.semester || 1) === academicYear.semester);
 
   // Get stats by department
   const csStats = getStatsByDepartment('Computer Science');
@@ -39,36 +39,46 @@ const FacultyDashboard = () => {
     { name: 'IS', groups: isStats.totalGroups, approved: isStats.approvedProposals }
   ];
 
-  const quickActions = [
-    {
-      title: 'Defense Scheduling',
-      description: `${defenseSchedules.length} scheduled`,
-      icon: Calendar,
-      path: '/faculty-head/defense',
-      color: 'bg-blue-500'
-    },
-    {
-      title: 'Evaluator Assignment',
-      description: 'Assign evaluators to groups',
-      icon: Users,
-      path: '/faculty-head/EvaluatorManager',
-      color: 'bg-purple-500'
-    },
-    {
-      title: 'Faculty Reports',
-      description: 'View faculty-wide statistics',
-      icon: BarChart3,
-      path: '/faculty-head/reports',
-      color: 'bg-teal-500'
-    },
-    {
-      title: 'Academic Semester',
-      description: `Current Semester: ${academicYear.semester}`,
-      icon: Clock,
-      path: '/faculty-head/academic-year',
-      color: 'bg-orange-500'
-    }
-  ];
+  const quickActions = isTerminated
+    ? [
+        {
+          title: 'Academic Semester',
+          description: 'Start a new academic year',
+          icon: Clock,
+          path: '/faculty-head/academic-year',
+          color: 'bg-orange-500',
+        },
+      ]
+    : [
+        {
+          title: 'Defense Scheduling',
+          description: `${defenseSchedules.length} scheduled`,
+          icon: Calendar,
+          path: '/faculty-head/defense',
+          color: 'bg-blue-500',
+        },
+        {
+          title: 'Evaluator Assignment',
+          description: 'Assign evaluators to groups',
+          icon: Users,
+          path: '/faculty-head/EvaluatorManager',
+          color: 'bg-purple-500',
+        },
+        {
+          title: 'Faculty Reports',
+          description: 'View faculty-wide statistics',
+          icon: BarChart3,
+          path: '/faculty-head/reports',
+          color: 'bg-teal-500',
+        },
+        {
+          title: 'Academic Semester',
+          description: `Current Semester: ${academicYear.semester}`,
+          icon: Clock,
+          path: '/faculty-head/academic-year',
+          color: 'bg-orange-500',
+        },
+      ];
 
   return (
     <div className="space-y-6">

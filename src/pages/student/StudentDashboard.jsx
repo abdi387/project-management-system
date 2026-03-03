@@ -157,7 +157,7 @@ const StudentDashboard = () => {
           value={defenseSchedule ? 'Scheduled' : 'Pending'}
           icon={Calendar}
           color={defenseSchedule ? 'teal' : 'gray'}
-          onClick={() => defenseSchedule && navigate('/student/defense-schedule')}
+          onClick={() => navigate('/student/defense-schedule')}
         />
       </div>
 

@@ -1,3 +1,4 @@
+// src/pages/auth/Unauthorized.jsx
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ShieldX, LogOut, Home } from 'lucide-react';

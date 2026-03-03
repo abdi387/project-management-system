@@ -4,7 +4,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, User, FileText, Users, Upload, CheckCircle, 
   Store, MessageSquare, ClipboardList, UserPlus, Settings, 
-  BarChart3, Calendar, UserCheck, BookOpen, GraduationCap, Shield, Info, Archive, MapPin
+  BarChart3, Calendar, UserCheck, BookOpen, GraduationCap, Shield, Info, Archive, MapPin, Layers
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProject } from '../../context/ProjectContext';
@@ -124,12 +124,27 @@ const Sidebar = ({ isOpen, onClose }) => {
         }
         return deptHeadItems;
       case 'faculty-head':
+        if (academicYear.status === 'terminated') {
+          return [
+            { path: '/faculty-head', icon: LayoutDashboard, label: 'Dashboard' },
+            { path: '/faculty-head/profile', icon: User, label: 'Profile' },
+            { path: '/faculty-head/academic-year', icon: BookOpen, label: 'Academic Year' },
+            { path: '/faculty-head/repository', icon: Archive, label: 'Faculty Repository' },
+          ];
+        }
+
         let facultyItems = [
           { path: '/faculty-head', icon: LayoutDashboard, label: 'Dashboard' },
           { path: '/faculty-head/profile', icon: User, label: 'Profile' },
-          { path: '/faculty-head/defense', icon: Calendar, label: 'Defense Schedule' },
+          { 
+            path: '/faculty-head/defense', 
+            icon: Calendar, 
+            label: 'Defense Schedule',
+            badge: getDefenseSchedules().filter(s => (s.semester || 1) === academicYear.semester).length
+          },
           { path: '/faculty-head/EvaluatorManager', icon: UserCheck, label: 'Evaluator Assignment' },
           { path: '/faculty-head/venues', icon: MapPin, label: 'Venues Management' },
+          { path: '/faculty-head/domains', icon: Layers, label: 'Project Domains' },
           { path: '/faculty-head/reports', icon: BarChart3, label: 'Faculty Reports' },          
           { path: '/faculty-head/academic-year', icon: BookOpen, label: 'Academic Year' },
           { path: '/faculty-head/repository', icon: Archive, label: 'Faculty Repository' },

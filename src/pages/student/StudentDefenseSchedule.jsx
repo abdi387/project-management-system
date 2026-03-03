@@ -1,3 +1,5 @@
+// src/pages/student/StudentDefenseSchedule.jsx
+
 import React from 'react';
 import { Calendar, Clock, MapPin, Users, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
