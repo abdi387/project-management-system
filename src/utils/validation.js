@@ -28,10 +28,10 @@ export const validateStudentId = (studentId) => {
   if (!studentId) {
     return { valid: false, error: 'Student ID is required' };
   }
-  // Format: NSR/XXXX/XX (example: NSR/1234/14)
-  const idRegex = /^NSR\/\d{4}\/\d{2}$/;
+  // Format: XXXX/XX (example: 1234/14)
+  const idRegex = /^\d{4}\/\d{2}$/;
   if (!idRegex.test(studentId)) {
-    return { valid: false, error: 'Invalid Student ID format (e.g., NSR/1234/14)' };
+    return { valid: false, error: 'Invalid Student ID format (e.g., 1234/14)' };
   }
   return { valid: true };
 };

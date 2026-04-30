@@ -9,6 +9,36 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Custom Scrollbar for AI Suggestions Modal */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #a855f7, #6366f1);
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #9333ea, #4f46e5);
+      }
+      
+      /* Smooth transitions */
+      * {
+        scroll-behavior: smooth;
+      }
+      
+      /* Mobile responsiveness improvements */
+      @media (max-width: 640px) {
+        .modal-content {
+          max-height: 90vh;
+          overflow-y: auto;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

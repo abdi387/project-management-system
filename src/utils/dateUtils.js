@@ -47,11 +47,11 @@ export const getDaysRemaining = (deadline) => {
 
 export const getRelativeTime = (dateString) => {
   if (!dateString) return 'N/A';
-  
+
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now - date) / 1000);
-  
+
   if (diffInSeconds < 60) {
     return 'Just now';
   } else if (diffInSeconds < 3600) {
@@ -66,6 +66,56 @@ export const getRelativeTime = (dateString) => {
   } else {
     return formatDate(dateString);
   }
+};
+
+// Format "Last active" time with support for minutes, hours, days, and months
+// Used to show when user's previous session ended (not current session)
+export const formatLastActive = (dateString) => {
+  if (!dateString) return 'Never';
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInMs = now - date;
+  const diffInMinutes = Math.floor(diffInMs / 60000);
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+  
+  // Calculate remaining after each unit
+  const minutes = diffInMinutes % 60;
+  const hours = diffInHours % 24;
+  
+  // Less than 1 minute
+  if (diffInMinutes < 1) {
+    return 'Just now';
+  }
+  
+  // Less than 1 hour: show minutes
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes}m ago`;
+  }
+  
+  // Less than 24 hours: show hours and minutes
+  if (diffInHours < 24) {
+    if (minutes > 0) {
+      return `${hours}h ${minutes}m ago`;
+    }
+    return `${hours}h ago`;
+  }
+  
+  // Less than 30 days: show days
+  if (diffInDays < 30) {
+    return `${diffInDays}d ago`;
+  }
+  
+  // 30+ days: show months
+  const months = Math.floor(diffInDays / 30);
+  if (months < 12) {
+    return `${months}mo ago`;
+  }
+  
+  // 12+ months: show years
+  const years = Math.floor(months / 12);
+  return `${years}y ago`;
 };
 
 // Alias for getRelativeTime - this fixes the import error

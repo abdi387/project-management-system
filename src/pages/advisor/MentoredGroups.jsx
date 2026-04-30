@@ -1,33 +1,72 @@
-// src/pages/advisor/MentoredGroups.jsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, FileText, MessageSquare, CheckCircle, ArrowRight } from 'lucide-react';
+import { Users, FileText, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useProject } from '../../context/ProjectContext';
+import { useProtectedRoute } from '../../context/ProtectedRouteContext';
+import { groupService, progressService, sectionService } from '../../services';
+import useFetch from '../../hooks/useFetch';
 import StatusBadge from '../../components/common/StatusBadge';
+import PageContainer from '../../components/layout/PageContainer';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { buildSectionNameMap, formatGroupDisplayName, getMemberSectionName } from '../../utils/sectionDisplay';
 
 const MentoredGroups = () => {
   const navigate = useNavigate();
-  const { user, users } = useAuth();
-  const { getGroupsByAdvisor, getProgressReportsByGroup, getFinalDraftByGroup } = useProject();
+  const { user } = useAuth();
+  const { academicYear } = useProtectedRoute();
 
-  const myGroups = getGroupsByAdvisor(user?.id);
+  const currentAcademicYearId = academicYear?.id;
+  const currentSemester = academicYear?.semester || '1';
+
+  // Fetch my groups filtered by current academic year
+  const {
+    data: groupsData,
+    loading: groupsLoading,
+    refetch: refetchGroups
+  } = useFetch(() => groupService.getGroups({ 
+    advisorId: user.id,
+    academicYearId: currentAcademicYearId 
+  }), [user.id, currentAcademicYearId]);
+
+  // Fetch all progress reports for these groups
+  const {
+    data: progressData,
+    loading: progressLoading
+  } = useFetch(() => progressService.getProgressReportsByAdvisor(user.id));
+
+  // Fetch sections
+  const { data: sectionsData, loading: sectionsLoading } = useFetch(() => sectionService.getAllSections());
+
+  const sectionNameMap = useMemo(
+    () => {
+      const sections = Array.isArray(sectionsData) ? sectionsData : (sectionsData?.sections || []);
+      return buildSectionNameMap(sections);
+    },
+    [sectionsData]
+  );
+
+  const myGroups = groupsData?.groups || [];
+  const allReports = progressData?.reports || [];
+
+  // For advisors, show all groups from current academic year
+  // In Semester 2, advisors need to see all their continuing groups
+  const semesterAwareGroups = myGroups;
 
   const getGroupStats = (groupId) => {
-    const reports = getProgressReportsByGroup(groupId);
-    const draft = getFinalDraftByGroup(groupId);
+    const reports = allReports.filter(r => r.groupId === groupId);
     return {
       totalReports: reports.length,
-      pendingReports: reports.filter(r => r.status === 'pending').length,
-      hasFinalDraft: !!draft,
-      draftStatus: draft?.advisorStatus || 'not-submitted'
+      pendingReports: reports.filter(r => r.status === 'pending').length
     };
   };
 
-  if (myGroups.length === 0) {
+  if (groupsLoading || progressLoading || sectionsLoading) {
+    return <LoadingSpinner fullScreen text="Loading groups..." />;
+  }
+
+  if (semesterAwareGroups.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">My Groups</h1>
+      <PageContainer title="">
         <div className="bg-white rounded-xl shadow-sm p-12 text-center">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-700 mb-2">No Groups Yet</h2>
@@ -35,49 +74,48 @@ const MentoredGroups = () => {
             Visit the Project Marketplace to claim projects and start mentoring groups.
           </p>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">My Groups</h1>
-        <span className="text-gray-500">{myGroups.length} group(s)</span>
-      </div>
-
+    <PageContainer
+      title=""
+      subtitle={`Semester ${currentSemester} • ${semesterAwareGroups.length} group(s)`}
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {myGroups.map((group) => {
+        {semesterAwareGroups.map((group) => {
           const stats = getGroupStats(group.id);
-          const members = group.members.map(id => users.find(u => u.id === id)).filter(Boolean);
-          const section = members.length > 0 ? members[0].section : null;
+          const firstMember = group.Members?.[0];
           
           return (
-            <div 
+            <div
               key={group.id}
-              className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+              className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer border border-gray-100"
               onClick={() => navigate(`/advisor/groups/${group.id}`)}
             >
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold text-gray-900">{group.name}</h3>
+                    <h3 className="font-semibold text-gray-900">{formatGroupDisplayName(group, sectionNameMap)}</h3>
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <span>{group.department}</span>
-                      {section && <span>• Section {section}</span>}
+                      {firstMember?.section && <span>• Section {getMemberSectionName(firstMember, sectionNameMap)}</span>}
                     </div>
                   </div>
                   <StatusBadge status={group.finalDraftStatus} />
                 </div>
 
                 <p className="text-blue-600 font-medium mb-4 line-clamp-2">
-                  {group.approvedTitle || 'Project title pending'}
+                  {typeof group.approvedTitle === 'string' 
+                    ? JSON.parse(group.approvedTitle).title 
+                    : group.approvedTitle || 'Project title pending'}
                 </p>
 
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Users className="w-4 h-4" />
-                    <span>{members.length} members</span>
+                    <span>{group.Members?.length || 0} members</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <FileText className="w-4 h-4" />
@@ -86,7 +124,7 @@ const MentoredGroups = () => {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-100">
+                <div className="grid grid-cols-2 gap-2 pt-4 border-t border-gray-100">
                   <div className="text-center">
                     <p className={`text-lg font-bold ${stats.pendingReports > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {stats.pendingReports}
@@ -94,17 +132,12 @@ const MentoredGroups = () => {
                     <p className="text-xs text-gray-500">Pending Reviews</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold text-blue-600">
-                      {stats.totalReports}
-                    </p>
-                    <p className="text-xs text-gray-500">Total Reports</p>
-                  </div>
-                  <div className="text-center">
                     <p className={`text-lg font-bold ${
-                      stats.draftStatus === 'approved' ? 'text-green-600' : 
-                      stats.hasFinalDraft ? 'text-yellow-600' : 'text-gray-400'
+                      group.finalDraftStatus === 'fully-approved' ? 'text-green-600' :
+                      group.finalDraftStatus === 'submitted' ? 'text-yellow-600' : 'text-gray-400'
                     }`}>
-                      {stats.draftStatus === 'approved' ? '✓' : stats.hasFinalDraft ? '⏳' : '-'}
+                      {group.finalDraftStatus === 'fully-approved' ? '✓' :
+                       group.finalDraftStatus === 'submitted' ? '⏳' : '-'}
                     </p>
                     <p className="text-xs text-gray-500">Final Draft</p>
                   </div>
@@ -119,7 +152,7 @@ const MentoredGroups = () => {
           );
         })}
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

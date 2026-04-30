@@ -20,22 +20,34 @@ import {
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const ReportChart = ({ 
-  type = 'bar', 
-  data, 
+const ReportChart = ({
+  type = 'bar',
+  data,
   title,
   xKey = 'name',
   yKey = 'value',
   dataKeys = ['value'],
   colors = COLORS,
-  height = 300
+  height = 300,
+  barCategoryGap = '20%',
+  barGap = 4,
+  barSize
 }) => {
+  // Handle empty or invalid data
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+        No data available
+      </div>
+    );
+  }
+
   const renderChart = () => {
     switch (type) {
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <BarChart data={data}>
+            <BarChart data={data} barCategoryGap={barCategoryGap} barGap={barGap} barSize={barSize}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />

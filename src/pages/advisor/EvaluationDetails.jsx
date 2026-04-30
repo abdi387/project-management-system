@@ -1,56 +1,71 @@
-// src/pages/advisor/EvaluationDetails.jsx
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, Users, BookOpen, Shield, UserCheck, Building, Mail } from 'lucide-react';
+import { ArrowLeft, Users, BookOpen, Shield, UserCheck, Building, Mail } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useProject } from '../../context/ProjectContext';
+import { useProtectedRoute } from '../../context/ProtectedRouteContext';
+import { groupService } from '../../services';
+import useFetch from '../../hooks/useFetch';
 import Button from '../../components/common/Button';
 import StatusBadge from '../../components/common/StatusBadge';
+import PageContainer from '../../components/layout/PageContainer';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { formatGroupDisplayName, getMemberSectionName } from '../../utils/sectionDisplay';
 
 const EvaluationDetails = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user, users } = useAuth();
-  const { groups } = useProject();
 
-  const group = groups.find(g => g.id === groupId);
-  
+  // Fetch group details
+  const { 
+    data: groupData, 
+    loading: groupLoading,
+    error: groupError 
+  } = useFetch(() => groupService.getGroupById(groupId));
+
+  const group = groupData?.group;
+
+  if (groupLoading) {
+    return <LoadingSpinner fullScreen text="Loading evaluation details..." />;
+  }
+
   if (!group) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <PageContainer>
         <Button variant="ghost" onClick={() => navigate(-1)} icon={ArrowLeft}>
           Back to Evaluations
         </Button>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+        <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-8 text-center">
           <p className="text-red-700">Group not found or you are not authorized to view this evaluation.</p>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
-  const members = group.members.map(id => users.find(u => u.id === id)).filter(Boolean);
-  const section = members.length > 0 ? members[0].section : null;
-  const advisor = users.find(u => u.id === group.advisorId);
-  const evaluators = group.evaluators || [];
+  const members = group.Members || [];
+  const advisor = group.Advisor;
+  const evaluators = group.Evaluators || [];
+  const groupDisplayName = formatGroupDisplayName(group);
+  const groupSectionName = getMemberSectionName(members[0]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageContainer>
       <Button variant="ghost" onClick={() => navigate(-1)} icon={ArrowLeft}>
         Back to Evaluations
       </Button>
 
       {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className="bg-white rounded-xl shadow-sm p-6 mt-4">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{groupDisplayName}</h1>
             <div className="flex items-center gap-2 mt-1 text-gray-500">
               <Building className="w-4 h-4" />
-              <span>{group.department ? `${group.department} Department` : 'Department N/A'}</span>
-              {section && (
+              <span>{group.department} Department</span>
+              {members[0]?.section && (
                 <>
                   <span className="mx-1">•</span>
-                  <span>Section {section}</span>
+                  <span>Section {groupSectionName}</span>
                 </>
               )}
             </div>
@@ -63,14 +78,20 @@ const EvaluationDetails = () => {
             <BookOpen className="w-5 h-5 text-indigo-600 mt-0.5" />
             <div>
               <h3 className="font-semibold text-indigo-900">Project Title</h3>
-              <p className="text-indigo-800 mt-1 font-medium">{group.approvedTitle || 'No title approved yet'}</p>
+              <p className="text-indigo-800 mt-1 font-medium">
+                {group.approvedTitle 
+                  ? (typeof group.approvedTitle === 'string' 
+                    ? JSON.parse(group.approvedTitle).title 
+                    : group.approvedTitle)
+                  : 'No title approved yet'}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Evaluation Committee */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <Shield className="w-5 h-5 text-indigo-600" />
           Evaluation Committee
@@ -78,14 +99,14 @@ const EvaluationDetails = () => {
         <p className="text-sm text-gray-500 mb-4">
           The following faculty members are assigned to evaluate this group jointly.
         </p>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {evaluators.map((evaluator) => (
-            <div 
-              key={evaluator.id} 
+            <div
+              key={evaluator.id}
               className={`flex items-center gap-4 p-4 rounded-lg border ${
-                evaluator.id === user.id 
-                  ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' 
+                evaluator.id === user.id
+                  ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200'
                   : 'bg-white border-gray-200'
               }`}
             >
@@ -106,7 +127,7 @@ const EvaluationDetails = () => {
       </div>
 
       {/* Group Details Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         {/* Advisor Info */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -154,7 +175,7 @@ const EvaluationDetails = () => {
           </ul>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };
 

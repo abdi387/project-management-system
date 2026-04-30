@@ -1,119 +1,181 @@
-// src/components/notifications/NotificationItem.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Bell, 
-  CheckCircle, 
-  X,
-  XCircle, 
-  AlertTriangle, 
-  MessageSquare,
-  Calendar,
-  Users,
-  FileText,
-  HelpCircle,
-  UserPlus
-} from 'lucide-react';
+import { X, Bell, CheckCircle, AlertCircle, Users, FileText, Calendar, Star } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
 import { getRelativeTime } from '../../utils/dateUtils';
 
-const NotificationItem = ({ notification, onClose }) => {
+const NotificationItem = ({ notification, onDelete, onClose }) => {
   const navigate = useNavigate();
   const { markAsRead, deleteNotification } = useNotification();
+  const [isRead, setIsRead] = useState(notification.isRead);
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'project-claim':
-        return { icon: Users, color: 'text-blue-500 bg-blue-50' };
-      case 'proposal-approved':
-        return { icon: CheckCircle, color: 'text-green-500 bg-green-50' };
-      case 'proposal-rejected':
-        return { icon: XCircle, color: 'text-red-500 bg-red-50' };
-      case 'progress-feedback':
-        return { icon: MessageSquare, color: 'text-purple-500 bg-purple-50' };
-      case 'overdue':
-        return { icon: AlertTriangle, color: 'text-yellow-500 bg-yellow-50' };
-      case 'draft-approved':
-        return { icon: FileText, color: 'text-teal-500 bg-teal-50' };
-      case 'defense-schedule':
-      case 'evaluators-assigned-group':
-        return { icon: AlertTriangle, color: 'text-red-500 bg-red-50' };
-      case 'evaluator-assigned':
-        return { icon: Users, color: 'text-cyan-500 bg-cyan-50' };
-      case 'registration-approved':
-        return { icon: CheckCircle, color: 'text-green-500 bg-green-50' };
-      case 'registration-rejected':
-        return { icon: XCircle, color: 'text-red-500 bg-red-50' };
-      case 'draft-escalation':
-        return { icon: FileText, color: 'text-indigo-500 bg-indigo-50' };
-      case 'new-registration':
-        return { icon: UserPlus, color: 'text-blue-500 bg-blue-50' };
-      case 'proposal-submission':
-        return { icon: FileText, color: 'text-purple-500 bg-purple-50' };
-      case 'system-support':
-        return { icon: HelpCircle, color: 'text-orange-500 bg-orange-50' };
-      default:
-        return { icon: Bell, color: 'text-gray-500 bg-gray-50' };
+  const handleClick = async () => {
+    try {
+      // Mark as read if not already
+      if (!isRead) {
+        setIsRead(true);
+        await markAsRead(notification.id);
+        if (onDelete) onDelete();
+      }
+
+      // Navigate to the relevant page if link exists
+      if (notification.link) {
+        navigate(notification.link);
+        if (onClose) onClose();
+      }
+    } catch (error) {
+      console.error('Error handling notification click:', error);
     }
   };
 
-  const { icon: Icon, color } = getNotificationIcon(notification.type);
-
-  const handleClick = () => {
-    markAsRead(notification.id);
-
-    // Explicitly prevent navigation for registration notifications
-    if (['registration-approved', 'registration-rejected'].includes(notification.type)) {
-      return;
-    }
-
-    if (notification.link) {
-      navigate(notification.link);
-    }
-    if (onClose) {
-      onClose();
-    }
-  };
-
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.stopPropagation();
-    deleteNotification(notification.id);
+    try {
+      await deleteNotification(notification.id);
+      if (onDelete) onDelete();
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
   };
+
+  // Get icon based on notification type
+  const getIcon = () => {
+    const type = notification.type || 'default';
+    switch (type) {
+      case 'new-registration':
+        return { icon: Users, color: '#3b82f6', bg: '#eff6ff' };
+      case 'registration-approved':
+        return { icon: CheckCircle, color: '#10b981', bg: '#f0fdf4' };
+      case 'registration-rejected':
+        return { icon: AlertCircle, color: '#ef4444', bg: '#fef2f2' };
+      case 'proposal-submission':
+        return { icon: FileText, color: '#8b5cf6', bg: '#f5f3ff' };
+      case 'group-formed':
+        return { icon: Users, color: '#06b6d4', bg: '#ecfeff' };
+      case 'evaluators-assigned-group':
+        return { icon: Users, color: '#ec4899', bg: '#fdf2f8' };
+      case 'defense-schedule':
+        return { icon: Calendar, color: '#6366f1', bg: '#eef2ff' };
+      case 'defense-scheduled':
+        return { icon: Calendar, color: '#8b5cf6', bg: '#f5f3ff' };
+      case 'semester-change':
+      case 'year-started':
+        return { icon: Calendar, color: '#f59e0b', bg: '#fffbeb' };
+      default:
+        return { icon: Bell, color: '#6b7280', bg: '#f9fafb' };
+    }
+  };
+
+  const { icon: Icon, color, bg } = getIcon();
 
   return (
-    <div 
+    <div
       onClick={handleClick}
-      className={`
-        relative flex items-start gap-3 px-4 py-3 transition-colors group
-        hover:bg-gray-50
-        ${notification.link && !['registration-approved', 'registration-rejected'].includes(notification.type) ? 'cursor-pointer' : 'cursor-default'}
-        ${!notification.read ? 'bg-red-50/50' : ''}
-      `}
+      style={{
+        padding: '14px 16px',
+        borderBottom: '1px solid #f0f0f0',
+        cursor: notification.link ? 'pointer' : 'default',
+        backgroundColor: isRead ? '#fff' : bg,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        transition: 'all 0.2s ease',
+        position: 'relative'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = isRead ? '#f9fafb' : color + '20';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = isRead ? '#fff' : bg;
+      }}
     >
-      <div className={`shrink-0 p-2 rounded-full ${color}`}>
-        <Icon className="w-4 h-4" />
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm ${!notification.read ? 'font-bold' : 'font-medium'} text-gray-900`}>
-          {notification.title}
-        </p>
-        <p className="text-sm text-gray-500 line-clamp-2">{notification.message}</p>
-        <p className="text-xs text-gray-400 mt-1">
-          {getRelativeTime(notification.createdAt)}
-        </p>
-      </div>
-      
-      {!notification.read && (
-        <div className="shrink-0 w-2 h-2 mt-2 rounded-full bg-red-500" />
+      {/* Unread indicator */}
+      {!isRead && (
+        <div style={{
+          position: 'absolute',
+          left: '0',
+          top: '0',
+          bottom: '0',
+          width: '3px',
+          backgroundColor: color,
+          borderRadius: '0 4px 4px 0'
+        }} />
       )}
 
+      {/* Icon */}
+      <div style={{
+        width: '40px',
+        height: '40px',
+        borderRadius: '12px',
+        backgroundColor: bg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
+      }}>
+        <Icon size={20} color={color} />
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          margin: '0 0 6px 0',
+          fontSize: '14px',
+          fontWeight: isRead ? '400' : '600',
+          color: '#1f2937',
+          lineHeight: '1.4'
+        }}>
+          {notification.message}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontSize: '12px',
+            color: '#9ca3af'
+          }}>
+            {getRelativeTime(notification.createdAt)}
+          </span>
+          {!isRead && (
+            <span style={{
+              fontSize: '10px',
+              backgroundColor: color,
+              color: '#fff',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              fontWeight: '500'
+            }}>
+              NEW
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Delete button */}
       <button
         onClick={handleDelete}
-        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Remove"
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '6px',
+          color: '#9ca3af',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '6px',
+          transition: 'all 0.2s',
+          flexShrink: 0
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#fee2e2';
+          e.currentTarget.style.color = '#ef4444';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'transparent';
+          e.currentTarget.style.color = '#9ca3af';
+        }}
+        title="Delete"
       >
-        <X className="w-3 h-3" />
+        <X size={16} />
       </button>
     </div>
   );

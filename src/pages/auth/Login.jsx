@@ -1,250 +1,354 @@
-// src/pages/auth/Login.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
-import { motion, useAnimation } from 'framer-motion';
+import { useNavigate, Link } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const navigate = useNavigate();
   const { login, user } = useAuth();
-  
+
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [errors, setErrors] = useState({});
-  const controls = useAnimation();
+  const [focusedField, setFocusedField] = useState(null);
 
-  // If a user is already logged in when they visit this page,
-  // redirect them to their dashboard. This prevents logged-in users
-  // from seeing the login form and fixes the redirect loop.
+  // If user is already logged in, redirect to dashboard
   useEffect(() => {
     if (user) {
       navigate(`/${user.role}`, { replace: true });
     }
   }, [user, navigate]);
 
+  // Check for session expired message on mount
+  useEffect(() => {
+    const loginMessage = sessionStorage.getItem('loginMessage');
+    if (loginMessage) {
+      try {
+        const { type, message } = JSON.parse(loginMessage);
+        if (type === 'warning') {
+          toast(message, {
+            duration: 5000,
+            icon: '⏰',
+            style: {
+              background: '#f59e0b',
+              color: '#fff'
+            }
+          });
+        } else if (type === 'error') {
+          toast.error(message, {
+            duration: 5000
+          });
+        }
+      } catch (e) {
+        console.error('Error parsing login message:', e);
+      } finally {
+        sessionStorage.removeItem('loginMessage');
+      }
+    }
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+
+    // Clear field-specific error when user types
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+    // Clear general error when user types
+    if (error) setError('');
   };
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-    if (!formData.password) newErrors.password = 'Password is required';
+
+    // Email validation
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!validateForm()) {
-      controls.start({
-        x: [0, -10, 10, -10, 10, 0], 
-        transition: { duration: 0.4 }
-      });
+      // Show specific field errors with toast
+      if (!formData.email.trim()) {
+        toast.error('Please enter your email', {
+          icon: '📧',
+          duration: 3000
+        });
+      } else if (!formData.password) {
+        toast.error('Please enter your password', {
+          icon: '🔒',
+          duration: 3000
+        });
+      } else if (formData.password.length < 6) {
+        toast.error('Password must be at least 6 characters', {
+          icon: '🔑',
+          duration: 3000
+        });
+      }
       return;
     }
-    
+
     setLoading(true);
+    setError('');
+
     try {
-      // Simulate network delay for effect
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const result = login(formData.email, formData.password);
-      
+      const result = await login(formData.email, formData.password);
+
       if (result.success) {
-        toast.success('Welcome back!');
+        // Personalized welcome message based on role
+        const roleMessages = {
+          'admin': 'Welcome back, Administrator!',
+          'faculty-head': 'Welcome back, Faculty Head!',
+          'dept-head': 'Welcome back, Department Head!',
+          'advisor': 'Welcome back, Advisor!',
+          'student': 'Welcome back, Student!'
+        };
+
+        const welcomeMessage = roleMessages[result.user.role] || 'Welcome back!';
+
+        toast.success(welcomeMessage, {
+          icon: '🎉',
+          duration: 4000,
+          style: {
+            background: '#10b981',
+            color: '#fff',
+            fontWeight: 'bold'
+          }
+        });
+
         navigate(`/${result.user.role}`);
       } else {
-        toast.error(result.error);
-        controls.start({
-          x: [0, -10, 10, -10, 10, 0],
-          transition: { duration: 0.4 }
-        });
-        setLoading(false);
+        // Handle different error types with specific messages
+        setError(result.error);
+
+        // Show specific error toasts based on error message
+        if (result.error && result.error.includes('pending')) {
+          toast.error('⏳ Your account is pending approval', {
+            duration: 5000,
+            style: {
+              background: '#f59e0b',
+              color: '#fff'
+            }
+          });
+        } else if (result.error && (result.error.includes('inactive') || result.error.includes('not eligible'))) {
+          toast.error('🚫 Your account is inactive', {
+            duration: 5000,
+            style: {
+              background: '#ef4444',
+              color: '#fff'
+            }
+          });
+        } else if (result.error && result.error.includes('Invalid email or password')) {
+          toast.error('❌ Invalid email or password', {
+            duration: 4000,
+            style: {
+              background: '#ef4444',
+              color: '#fff'
+            }
+          });
+        } else {
+          toast.error(result.error || 'Login failed', {
+            icon: '❌',
+            duration: 4000
+          });
+        }
       }
-    } catch (error) {
+    } catch (err) {
+      setError('Network error. Please check your connection.');
+      toast.error('🌐 Network error. Please check your connection.', {
+        duration: 5000,
+        style: {
+          background: '#ef4444',
+          color: '#fff'
+        }
+      });
+      console.error('Login error:', err);
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
-      {/* Style to hide browser's default password reveal icon */}
-      <style>{`
-        input[type="password"]::-ms-reveal,
-        input[type="password"]::-ms-clear {
-          display: none;
-        }
-        input[type="password"]::-webkit-reveal,
-        input[type="password"]::-webkit-clear-button {
-          display: none;
-        }
-      `}</style>
-      
-      {/* Advanced Background */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_left,var(--tw-gradient-stops))] from-violet-100 via-slate-50 to-white opacity-70"></div>
-        <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(ellipse_at_bottom_right,var(--tw-gradient-stops))] from-fuchsia-100 via-transparent to-transparent opacity-60"></div>
-        
-        {/* Animated Shapes */}
-        <motion.div 
-          animate={{ 
-            y: [0, -20, 0],
-            rotate: [0, 5, 0],
-            scale: [1, 1.05, 1]
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-20 left-20 w-72 h-72 bg-violet-300/30 rounded-full blur-3xl mix-blend-multiply"
-        />
-        <motion.div 
-          animate={{ 
-            y: [0, 30, 0],
-            rotate: [0, -5, 0],
-            scale: [1, 1.1, 1]
-          }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          className="absolute bottom-20 right-20 w-96 h-96 bg-fuchsia-300/30 rounded-full blur-3xl mix-blend-multiply"
-        />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-4" style={{ fontFamily: 'Times New Roman, serif' }}>
+      {/* Subtle decorative elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-100/40 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-100/30 rounded-full blur-3xl"></div>
       </div>
 
-      {/* Back Button */}
-      <motion.button 
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.5 }}
+
+      <button
+        type="button"
         onClick={() => navigate('/')}
-        className="absolute top-8 left-8 flex items-center gap-2 text-slate-500 hover:text-violet-600 font-medium transition-all z-20 group"
+        className="absolute top-8 left-8 flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition-colors group z-10"
       >
-        <div className="p-2 bg-white rounded-full shadow-sm group-hover:shadow-md transition-all border border-slate-100">
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-        </div>
-        <span className="hidden sm:inline">Back to Home</span>
-      </motion.button>
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        <span>Back to Home</span>
+      </button>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="w-full max-w-md relative z-10"
-      >
-        {/* Glass Card */}
-        <motion.div 
-          animate={controls}
-          className="bg-white/50 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-violet-500/10 border border-white/30 p-8 md:p-10 relative overflow-hidden"
-        >
-          {/* Decorative top gradient line */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-linear-to-r from-violet-500 via-fuchsia-500 to-violet-500"></div>
-
-          {/* Header */}
-          <div className="text-center mb-10">
-            <motion.div 
-              initial={{ scale: 0.5, opacity: 0, y: -20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
-              className="relative w-40 h-40 mx-auto mb-6"
+      <div className="w-full max-w-xs relative z-10">
+        {/* Login Card */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl shadow-gray-200/50 border border-white p-7">
+          {/* Header with Logo */}
+          <div className="text-center mb-6">
+            <div className="mb-4">
+              <img
+                src="/logo.png"
+                alt="HU Logo"
+                className="w-24 h-24 object-contain mx-auto drop-shadow-lg"
+              />
+            </div>
+            <h2
+              className="text-lg md:text-xl text-transparent bg-clip-text bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 mb-3 pb-1 uppercase"
+              style={{
+                fontFamily: 'Times New Roman, serif',
+                fontWeight: '950',
+                letterSpacing: '0.08em',
+                textShadow: '3px 3px 6px rgba(0,0,0,0.15)'
+              }}
             >
-              <div className="absolute inset-0 bg-violet-400/20 rounded-full blur-xl animate-pulse"></div>
-              <div className="relative w-full h-full bg-white rounded-2xl shadow-lg flex items-center justify-center border border-slate-100 p-4">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
-              </div>
-            </motion.div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2 tracking-tight">Welcome Back</h2>
-            <p className="text-slate-500 text-sm">Sign in to manage your projects</p>
+              Welcome Back
+            </h2>
+            <div className="w-24 h-1 bg-gradient-to-r from-blue-400 to-indigo-500 mx-auto mb-2 rounded-full"></div>
+            <p className="text-gray-500 text-sm">Sign in to access your dashboard</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-600 ml-1 uppercase tracking-wider">Email Address</label>
-              <div className="relative group">
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email Field */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-700 ml-1 uppercase tracking-wide">
+                Email Address
+              </label>
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Mail className={`w-5 h-5 transition-colors ${errors.email ? 'text-red-400' : 'text-slate-400 group-focus-within:text-violet-500'}`} />
+                  <Mail className={`w-5 h-5 ${
+                    errors.email ? 'text-red-400' : focusedField === 'email' ? 'text-blue-600' : 'text-gray-400'
+                  }`} />
                 </div>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
                   placeholder="you@example.com"
-                  className={`w-full pl-11 pr-4 py-3.5 bg-slate-50/50 border ${errors.email ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:border-violet-500 focus:ring-violet-200'} rounded-xl focus:bg-white focus:ring-4 transition-all outline-none text-sm font-medium placeholder:text-slate-400`}
+                  disabled={loading}
+                  className={`w-full pl-11 pr-4 py-2.5 bg-gray-50/80 border ${
+                    errors.email
+                      ? 'border-red-300 focus:border-red-400'
+                      : focusedField === 'email'
+                      ? 'border-blue-400'
+                      : 'border-gray-200'
+                  } rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all outline-none text-sm font-medium placeholder:text-gray-400 text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed`}
                 />
+                {!errors.email && focusedField === 'email' && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  </div>
+                )}
               </div>
-              {errors.email && <p className="text-xs text-red-500 ml-1 font-medium">{errors.email}</p>}
+              {errors.email && (
+                <p className="text-xs text-red-500 ml-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.email}
+                </p>
+              )}
             </div>
 
-            {/* Password */}
-            <div className="space-y-1.5">
+            {/* Password Field */}
+            <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
-                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label> 
-                <a href="#" className="text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors">Forgot?</a>
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  Password
+                </label>
+                <Link
+                  to="/auth/forgot-password"
+                  className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Forgot Password?
+                </Link>
               </div>
-              <div className="relative group">
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className={`w-5 h-5 transition-colors ${errors.password ? 'text-red-400' : 'text-slate-400 group-focus-within:text-violet-500'}`} />
+                  <Lock className={`w-5 h-5 ${
+                    errors.password ? 'text-red-400' : focusedField === 'password' ? 'text-blue-600' : 'text-gray-400'
+                  }`} />
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
                   placeholder="••••••••"
-                  className={`w-full pl-11 pr-12 py-3.5 bg-slate-50/50 border ${errors.password ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:border-violet-500 focus:ring-violet-200'} rounded-xl focus:bg-white focus:ring-4 transition-all outline-none text-sm font-medium placeholder:text-slate-400`}
+                  disabled={loading}
+                  className={`w-full pl-11 pr-12 py-2.5 bg-gray-50/80 border ${
+                    errors.password
+                      ? 'border-red-300 focus:border-red-400'
+                      : focusedField === 'password'
+                      ? 'border-blue-400'
+                      : 'border-gray-200'
+                  } rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all outline-none text-sm font-medium placeholder:text-gray-400 text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              {errors.password && <p className="text-xs text-red-500 ml-1 font-medium">{errors.password}</p>}
+              {errors.password && (
+                <p className="text-xs text-red-500 ml-1 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {errors.password}
+                </p>
+              )}
             </div>
 
             {/* Submit Button */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-linear-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/30 flex items-center justify-center gap-2 transition-all disabled:opacity-70 disabled:cursor-not-allowed mt-4"
+              className="w-full py-2.5 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white font-semibold rounded-2xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-600/40 hover:from-blue-700 hover:via-indigo-700 hover:to-indigo-800 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed transform hover:-translate-y-0.5"
             >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  Sign In <ArrowRight className="w-5 h-5" />
-                </>
-              )}
-            </motion.button>
+              <span className="text-base">Sign In</span>
+            </button>
           </form>
+        </div>
 
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="text-sm text-slate-500">
-              Don't have an account?{' '}
-              <button onClick={() => navigate('/')} className="font-semibold text-violet-600 hover:text-violet-700 transition-colors">
-                Register
-              </button>
-            </p>
-          </div>
-        </motion.div>
-        
-        {/* Decorative footer text */}
-        <p className="text-center text-xs text-slate-400 mt-8 font-medium">
+        {/* Footer Text */}
+        <p className="text-center text-xs text-gray-400 mt-8 font-medium">
           &copy; {new Date().getFullYear()} Faculty of Informatics. All rights reserved.
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 };

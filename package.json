@@ -16,6 +16,7 @@
     "@nivo/core": "^0.88.0",
     "@nivo/pie": "^0.88.0",
     "@tailwindcss/vite": "^4.1.18",
+    "axios": "^1.13.6",
     "framer-motion": "^12.34.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
@@ -23,8 +24,9 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
+    "react-is": "^19.2.5",
     "react-router-dom": "^7.13.0",
-    "recharts": "^3.7.0",
+    "recharts": "^3.8.0",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {

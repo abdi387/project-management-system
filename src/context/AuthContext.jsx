@@ -1,5 +1,5 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService, userService, academicService } from '../services';
 
 const AuthContext = createContext(null);
 
@@ -14,230 +14,320 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
+  const [serverError, setServerError] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
-  const [isRegistrationOpen, setIsRegistrationOpen] = useState(() => {
-    const savedStatus = localStorage.getItem('fypRegistrationStatus');
-    return savedStatus ? JSON.parse(savedStatus) : true; // Default to open
-  });
-
-  // Initialize mock users data
-  const [users, setUsers] = useState(() => {
-    const savedUsers = localStorage.getItem('fypUsers');
-    if (savedUsers) {
-      return JSON.parse(savedUsers);
-    }
-    
-    // Default users (Admins, Heads, etc.)
-    const defaultUsers = [
-      {
-        id: 'admin-001',
-        email: 'admin@hu.edu.et',
-        password: 'admin123',
-        role: 'admin',
-        name: 'System Administrator',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'fh-001',
-        email: 'facultyhead@hu.edu.et',
-        password: 'faculty123',
-        role: 'faculty-head',
-        name: 'Dr. Abebe Kebede',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'dh-cs-001',
-        email: 'cs.head@hu.edu.et',
-        password: 'cshead123',
-        role: 'dept-head',
-        name: 'Dr. Mulugeta Tadesse',
-        department: 'Computer Science',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'dh-it-001',
-        email: 'it.head@hu.edu.et',
-        password: 'ithead123',
-        role: 'dept-head',
-        name: 'Dr. Sara Bekele',
-        department: 'Information Technology',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'dh-is-001',
-        email: 'is.head@hu.edu.et',
-        password: 'ishead123',
-        role: 'dept-head',
-        name: 'Dr. Daniel Haile',
-        department: 'Information Systems',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'adv-001',
-        email: 'advisor1@hu.edu.et',
-        password: 'advisor123',
-        role: 'advisor',
-        name: 'Mr. Yohannes Girma',
-        department: 'Computer Science',
-        status: 'active',
-        maxGroups: 2,
-        currentGroups: 0,
-        createdAt: new Date().toISOString()
-      }
-    ];
-    
-    localStorage.setItem('fypUsers', JSON.stringify(defaultUsers));
-    return defaultUsers;
-  });
-
+  // Load user from localStorage on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('fypCurrentUser');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+    const loadUser = async () => {
+      const storedUser = authService.getStoredUser();
+      const token = localStorage.getItem('fypToken');
+      
+      if (storedUser && token) {
+        try {
+          // Verify token by fetching current user
+          const response = await authService.getCurrentUser();
+          setUser(response.user);
+          setServerError(false);
+          setAuthError(null);
+        } catch (error) {
+          console.error('Failed to load user:', error);
+          
+          // Check if it's a server connection error
+          if (error.message?.includes('timeout') || error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+            setServerError(true);
+            setAuthError('Cannot connect to server. Please check if backend is running.');
+            // Keep the stored user for offline display
+            setUser(storedUser);
+          } else {
+            // Token invalid, clear storage
+            authService.logout();
+            setAuthError('Session expired. Please login again.');
+          }
+        }
+      }
+      
+      // Load registration status
+      try {
+        const regResponse = await academicService.getRegistrationStatus();
+        setIsRegistrationOpen(regResponse.isOpen);
+      } catch (error) {
+        console.error('Failed to load registration status:', error);
+        if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
+          setServerError(true);
+        }
+      }
+      
+      setLoading(false);
+    };
+
+    loadUser();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('fypUsers', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem('fypRegistrationStatus', JSON.stringify(isRegistrationOpen));
-  }, [isRegistrationOpen]);
-
-  // LOGIN Logic with Timestamp
-  const login = (email, password) => {
-    const foundUser = users.find(u => u.email === email && u.password === password);
-    
-    if (!foundUser) {
-      return { success: false, error: 'Invalid email or password.' };
+  // LOGIN
+  const login = async (email, password) => {
+    setAuthError(null);
+    try {
+      const response = await authService.login(email, password);
+      setUser(response.user);
+      setServerError(false);
+      return { success: true, user: response.user };
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Check if it's a server connection error
+      if (error.message?.includes('timeout') || error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+        setServerError(true);
+        const errorMsg = 'Cannot connect to server. Please make sure the backend server is running on port 5001.';
+        setAuthError(errorMsg);
+        return { 
+          success: false, 
+          error: errorMsg 
+        };
+      }
+      
+      const errorMsg = error.error || error.message || 'Login failed';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
     }
-
-    if (foundUser.status === 'active') {
-      const userWithSession = {
-        ...foundUser,
-        lastLogin: new Date().toISOString() // Track login time
-      };
-
-      // Remove password from session storage for security
-      const { password: _, ...userWithoutPassword } = userWithSession;
-
-      setUser(userWithoutPassword);
-      localStorage.setItem('fypCurrentUser', JSON.stringify(userWithoutPassword));
-      return { success: true, user: userWithoutPassword };
-    }
-
-    if (foundUser.status === 'pending') {
-      return { success: false, error: 'Your registration is still pending approval from your Department Head.' };
-    }
-
-    // For any other status like 'inactive' or 'rejected'
-    return { success: false, error: 'you are not eligible to use this system any more' };
   };
 
+  // LOGOUT
   const logout = () => {
+    authService.logout();
     setUser(null);
-    localStorage.removeItem('fypCurrentUser');
+    setAuthError(null);
   };
 
-  // REGISTER Logic (For Students)
-  const register = (userData) => {
-    const existingUser = users.find(u => u.email === userData.email);
-    if (existingUser) {
-      return { success: false, error: 'Email already registered.' };
+  // REGISTER
+  const register = async (userData) => {
+    setAuthError(null);
+    try {
+      const response = await authService.register(userData);
+      return { success: true, message: response.message };
+    } catch (error) {
+      console.error('Register error:', error);
+      
+      if (error.message?.includes('timeout') || error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+        setServerError(true);
+        const errorMsg = 'Cannot connect to server. Please make sure the backend server is running.';
+        setAuthError(errorMsg);
+        return { 
+          success: false, 
+          error: errorMsg 
+        };
+      }
+      
+      const errorMsg = error.error || error.message || 'Registration failed';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
     }
-
-    const newUser = {
-      ...userData,
-      id: `std-${Date.now()}`,
-      role: 'student',
-      status: 'pending', // Critical: Sets status to pending for Dept Head review
-      createdAt: new Date().toISOString()
-    };
-
-    setUsers(prev => [...prev, newUser]);
-    return { success: true, message: 'Registration submitted! Please wait for Department Head approval.' };
   };
 
-  const addUser = (userData) => {
-    const existingUser = users.find(u => u.email === userData.email);
-    if (existingUser) {
-      return { success: false, error: 'Email already exists.' };
+  // ADD USER (Admin)
+  const addUser = async (userData) => {
+    setAuthError(null);
+    try {
+      const response = await userService.createUser(userData);
+      return { success: true, message: response.message };
+    } catch (error) {
+      console.error('Add user error:', error);
+      
+      if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
+        setServerError(true);
+        const errorMsg = 'Server connection lost. Please check if backend is running.';
+        setAuthError(errorMsg);
+        return { 
+          success: false, 
+          error: errorMsg 
+        };
+      }
+      
+      const errorMsg = error.error || error.message || 'Failed to add user';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
     }
-
-    const newUser = {
-      ...userData,
-      id: `${userData.role}-${Date.now()}`,
-      status: 'active',
-      createdAt: new Date().toISOString()
-    };
-
-    setUsers(prev => [...prev, newUser]);
-    return { success: true, message: 'User added successfully.' };
   };
 
-  const updateUser = (userId, updates) => {
-    setUsers(prev => prev.map(u => 
-      u.id === userId ? { ...u, ...updates } : u
-    ));
-    
-    if (user && user.id === userId) {
-      const updatedUser = { ...user, ...updates };
-      setUser(updatedUser);
-      localStorage.setItem('fypCurrentUser', JSON.stringify(updatedUser));
+  // UPDATE USER (Admin only – for other users)
+  const updateUser = async (userId, updates) => {
+    try {
+      const response = await userService.updateUser(userId, updates);
+      
+      // Update current user if it's the same user
+      if (user && user.id === userId) {
+        setUser(response.user);
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Update user error:', error);
+      const errorMsg = error.error || error.message || 'Failed to update user';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
     }
-    return { success: true };
   };
 
-  const toggleRegistration = () => {
-    setIsRegistrationOpen(prev => !prev);
+  // UPDATE OWN PROFILE (for any authenticated user)
+  const updateOwnProfile = async (updates) => {
+    try {
+      const response = await userService.updateOwnProfile(updates);
+      if (response.success && response.user) {
+        setUser(response.user);
+        // Also update localStorage
+        localStorage.setItem('fypUser', JSON.stringify(response.user));
+        return { success: true, user: response.user };
+      }
+      return { success: false, error: 'Failed to update profile' };
+    } catch (error) {
+      console.error('Update own profile error:', error);
+      const errorMsg = error.error || error.message || 'Failed to update profile';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
   };
 
-  const deleteUser = (userId) => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    return { success: true };
+  // REFRESH CURRENT USER DATA
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem('fypToken');
+      if (!token) {
+        console.log('No token found, cannot refresh user');
+        return null;
+      }
+      
+      console.log('Refreshing user data from server...');
+      const response = await authService.getCurrentUser();
+      
+      if (response && response.user) {
+        console.log('User data refreshed successfully');
+        setUser(response.user);
+        setServerError(false);
+        setAuthError(null);
+        
+        // Also update localStorage
+        localStorage.setItem('fypUser', JSON.stringify(response.user));
+        
+        return response.user;
+      } else {
+        console.log('Refresh response did not contain user data');
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+      
+      // If unauthorized, clear storage
+      if (error.status === 401 || error.response?.status === 401) {
+        console.log('Unauthorized during refresh, logging out');
+        authService.logout();
+        setUser(null);
+        setAuthError('Session expired. Please login again.');
+      }
+      
+      return null;
+    }
   };
 
-  const getUsersByRole = (role) => {
-    return users.filter(u => u.role === role);
+  // DELETE USER
+  const deleteUser = async (userId) => {
+    try {
+      await userService.deleteUser(userId);
+      return { success: true };
+    } catch (error) {
+      console.error('Delete user error:', error);
+      const errorMsg = error.error || error.message || 'Failed to delete user';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
   };
 
-  // Critical for Dept Head Workflow
-  const getUsersByDepartment = (department) => {
-    return users.filter(u => u.department === department);
+  // TOGGLE REGISTRATION (Admin)
+  const toggleRegistration = async () => {
+    try {
+      const response = await academicService.toggleRegistration();
+      setIsRegistrationOpen(response.isOpen);
+      return { success: true };
+    } catch (error) {
+      console.error('Toggle registration error:', error);
+      const errorMsg = error.error || error.message || 'Failed to toggle registration';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
   };
 
-  // Logic to fetch pending students for a specific department
-  const getPendingStudents = (department) => {
-    return users.filter(
-      u => u.role === 'student' && u.status === 'pending' && u.department === department
-    );
+  // GET USERS BY ROLE
+  const getUsersByRole = async (role) => {
+    try {
+      const response = await userService.getUsersByRole(role);
+      return response.users || [];
+    } catch (error) {
+      console.error('Failed to get users by role:', error);
+      return [];
+    }
   };
 
-  const approveStudent = (studentId) => {
-    return updateUser(studentId, { status: 'active' });
+  // GET USERS BY DEPARTMENT
+  const getUsersByDepartment = async (department) => {
+    try {
+      const response = await userService.getUsersByDepartment(department);
+      return response.users || [];
+    } catch (error) {
+      console.error('Failed to get users by department:', error);
+      return [];
+    }
   };
 
-  const rejectStudent = (studentId) => {
-    return updateUser(studentId, { status: 'rejected' });
+  // GET PENDING STUDENTS
+  const getPendingStudents = async (department) => {
+    try {
+      const response = await userService.getPendingStudents(department);
+      return response.students || [];
+    } catch (error) {
+      console.error('Failed to get pending students:', error);
+      return [];
+    }
+  };
+
+  // APPROVE STUDENT
+  const approveStudent = async (studentId) => {
+    try {
+      await userService.approveStudent(studentId);
+      return { success: true };
+    } catch (error) {
+      console.error('Approve student error:', error);
+      const errorMsg = error.error || error.message || 'Failed to approve student';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  // REJECT STUDENT
+  const rejectStudent = async (studentId) => {
+    try {
+      await userService.rejectStudent(studentId);
+      return { success: true };
+    } catch (error) {
+      console.error('Reject student error:', error);
+      const errorMsg = error.error || error.message || 'Failed to reject student';
+      setAuthError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
   };
 
   const value = {
     user,
-    users,
     loading,
+    serverError,
+    authError,
     login,
     logout,
     register,
     addUser,
     updateUser,
+    updateOwnProfile,
     deleteUser,
+    refreshUser,
     getUsersByRole,
     getUsersByDepartment,
     getPendingStudents,
@@ -249,7 +339,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

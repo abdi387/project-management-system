@@ -14,7 +14,8 @@ const Modal = ({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   confirmVariant = 'primary',
-  loading = false
+  loading = false,
+  disabled = false
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -30,10 +31,11 @@ const Modal = ({
   if (!isOpen) return null;
 
   const sizes = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
+    sm: 'max-w-md w-full',
+    md: 'max-w-lg w-full',
+    lg: 'max-w-2xl w-full',
+    xl: 'max-w-4xl w-full',
+    '2xl': 'max-w-5xl w-full',
     full: 'max-w-full mx-4'
   };
 
@@ -72,14 +74,19 @@ const Modal = ({
           {/* Footer */}
           {showFooter && (
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
-              <Button variant="secondary" onClick={onClose}>
+              <Button 
+                variant="secondary" 
+                onClick={onClose}
+                disabled={loading || disabled}
+              >
                 {cancelText}
               </Button>
               {onConfirm && (
-                <Button 
-                  variant={confirmVariant} 
+                <Button
+                  variant={confirmVariant}
                   onClick={onConfirm}
                   loading={loading}
+                  disabled={disabled}
                 >
                   {confirmText}
                 </Button>

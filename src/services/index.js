@@ -1,0 +1,15 @@
+export { default as api } from './apiConfig';
+export { default as authService } from './authService';
+export { default as userService } from './userService';
+export { default as academicService } from './academicService';
+export { default as groupService } from './groupService';
+export { default as proposalService } from './proposalService';
+export { default as progressService } from './progressService';
+export { default as finalDraftService } from './finalDraftService';
+export { default as defenseService } from './defenseService';
+export { default as notificationService } from './notificationService';
+export { default as inquiryService } from './inquiryService';
+export { default as advisorRepository } from './advisorRepository';
+export { default as uploadService } from './uploadService';
+export { default as aiSuggestionService } from './aiSuggestionService';
+export { default as sectionService } from './sectionService';

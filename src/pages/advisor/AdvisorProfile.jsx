@@ -1,18 +1,61 @@
-// src/pages/advisor/AdvisorProfile.jsx
-import React, { useState } from 'react';
-import { Camera } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Camera, Key } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useProject } from '../../context/ProjectContext';
+import { useProtectedRoute } from '../../context/ProtectedRouteContext';
+import { groupService, userService, academicService } from '../../services';
+import useFetch from '../../hooks/useFetch';
 import ProfileCard from '../../components/common/ProfileCard';
 import Modal from '../../components/common/Modal';
+import PageContainer from '../../components/layout/PageContainer';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import toast from 'react-hot-toast';
 
 const AdvisorProfile = () => {
-  const { user, updateUser } = useAuth();
-  const { projectSettings, groups } = useProject();
+  const navigate = useNavigate();
+  const { user, updateOwnProfile } = useAuth();
+  const { isReadOnly, systemSettings } = useProtectedRoute();
+
+  // Fetch current academic year to filter groups
+  const {
+    data: currentYearData,
+    loading: yearLoading
+  } = useFetch(() => academicService.getCurrentAcademicYear(), []);
+
+  // Fetch advisor's groups (filtered by current academic year)
+  const {
+    data: groupsData,
+    loading: groupsLoading
+  } = useFetch(() => {
+    const currentYearId = currentYearData?.academicYear?.id;
+    return groupService.getGroups({ advisorId: user.id, academicYearId: currentYearId });
+  }, [user.id, currentYearData]);
+
+  // Fetch fresh settings on mount to ensure we have the latest value
+  const {
+    data: settingsData
+  } = useFetch(() => academicService.getSystemSettings(), []);
+
   const [showEditModal, setShowEditModal] = useState(false);
-  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
+  const [profilePicture, setProfilePicture] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Initialize profile picture from user context (only when it actually changes)
+  useEffect(() => {
+    const newPic = user?.profilePicture || '';
+    setProfilePicture(prev => {
+      // Only update if it's actually different to avoid re-renders
+      return prev !== newPic ? newPic : prev;
+    });
+  }, [user?.profilePicture]);
+
+  const groups = groupsData?.groups || [];
+  // Merge context settings with freshly fetched settings (fresh takes priority)
+  const freshSettings = settingsData?.settings || systemSettings || {};
+  // support both the newer and legacy keys; academic backend prefers "maximum_groups_per_advisor"
+  const maxGroups = parseInt(freshSettings.maximum_groups_per_advisor ?? freshSettings.max_groups_per_advisor) || 3;
+  const currentGroupCount = groups.length;
+  const availableSlots = Math.max(0, maxGroups - currentGroupCount);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -25,10 +68,22 @@ const AdvisorProfile = () => {
     }
   };
 
-  // Calculate dynamic stats
-  const currentGroupCount = groups.filter(g => g.advisorId === user?.id).length;
-  const maxGroups = projectSettings?.maxGroupsPerAdvisor || 5;
-  const availableSlots = Math.max(0, maxGroups - currentGroupCount);
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const result = await updateOwnProfile({ profilePicture });
+      if (result.success) {
+        toast.success('Profile picture updated successfully!');
+        setShowEditModal(false);
+      } else {
+        toast.error(result.error || 'Failed to update profile picture');
+      }
+    } catch (error) {
+      toast.error(error.error || 'Failed to update profile picture');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getDepartmentAbbreviation = (department) => {
     if (!department) return 'N/A';
@@ -38,27 +93,28 @@ const AdvisorProfile = () => {
     }
     return department.slice(0, 3).toUpperCase();
   };
-  const departmentAbbreviation = getDepartmentAbbreviation(user?.department);
 
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      updateUser(user.id, { profilePicture });
-      toast.success('Profile picture updated successfully!');
-      setShowEditModal(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (groupsLoading || yearLoading) {
+    return <LoadingSpinner fullScreen text="Loading profile..." />;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-      
-      <ProfileCard 
-        user={user} 
-        editable 
-        onEdit={() => setShowEditModal(true)} 
+    <PageContainer title="">
+      {/* Change Password Button */}
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => navigate('/auth/change-password')}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg font-medium"
+        >
+          <Key className="w-4 h-4" />
+          <span>Change Password</span>
+        </button>
+      </div>
+
+      <ProfileCard
+        user={user}
+        editable={!isReadOnly}
+        onEdit={() => setShowEditModal(true)}
       />
 
       {/* Advisor Stats */}
@@ -74,18 +130,17 @@ const AdvisorProfile = () => {
             <p className="text-sm text-gray-600">Max Groups</p>
           </div>
           <div className="text-center p-4 bg-purple-50 rounded-lg">
-            <p className="text-3xl font-bold text-purple-600">
-              {availableSlots}
-            </p>
+            <p className="text-3xl font-bold text-purple-600">{availableSlots}</p>
             <p className="text-sm text-gray-600">Available Slots</p>
           </div>
           <div className="text-center p-4 bg-teal-50 rounded-lg">
-            <p className="text-3xl font-bold text-teal-600">{departmentAbbreviation}</p>
+            <p className="text-3xl font-bold text-teal-600">{getDepartmentAbbreviation(user?.department)}</p>
             <p className="text-sm text-gray-600">Department</p>
           </div>
         </div>
       </div>
 
+      {/* Edit Profile Picture Modal */}
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -113,7 +168,7 @@ const AdvisorProfile = () => {
           </div>
         </div>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 
